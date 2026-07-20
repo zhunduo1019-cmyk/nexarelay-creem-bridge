@@ -281,21 +281,29 @@ async function handleWebhook(req, res) {
   const raw = await readBody(req);
   const signature = req.headers['creem-signature'];
   if (!verifyCreemSignature(raw, signature)) {
+    console.warn('Creem webhook rejected: invalid signature');
     return json(res, 401, { success: false, message: 'invalid signature' });
   }
 
   const event = JSON.parse(raw.toString('utf8'));
   const eventId = event.id || event.event_id;
-  if (!eventId) return json(res, 400, { success: false, message: 'missing event id' });
+  if (!eventId) {
+    console.warn('Creem webhook rejected: missing event id');
+    return json(res, 400, { success: false, message: 'missing event id' });
+  }
+
+  console.log(`Creem webhook received: ${event.eventType || 'unknown'} ${eventId}`);
 
   const processed = await loadProcessedEvents();
   if (processed[eventId]) {
+    console.log(`Creem webhook duplicate ignored: ${eventId}`);
     return json(res, 200, { success: true, duplicate: true, result: processed[eventId] });
   }
 
   if (event.eventType !== 'checkout.completed') {
     processed[eventId] = { ignored: true, eventType: event.eventType, at: new Date().toISOString() };
     await saveProcessedEvents(processed);
+    console.log(`Creem webhook ignored: ${event.eventType} ${eventId}`);
     return json(res, 200, { success: true, ignored: true });
   }
 
@@ -324,6 +332,7 @@ async function handleWebhook(req, res) {
     at: new Date().toISOString(),
   };
   await saveProcessedEvents(processed);
+  console.log(`Creem checkout completed: event=${eventId} product=${productId} quota=${quota} result=${JSON.stringify(result)}`);
 
   return json(res, 200, { success: true, result });
 }
