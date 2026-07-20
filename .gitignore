@@ -1,0 +1,6 @@
+.env
+*.local
+node_modules/
+creem-bridge/data/
+npm-debug.log
+.DS_Store
