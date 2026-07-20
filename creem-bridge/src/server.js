@@ -46,6 +46,120 @@ function text(res, status, body, headers = {}) {
   res.end(body);
 }
 
+function html(res, status, body) {
+  res.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': Buffer.byteLength(body),
+  });
+  res.end(body);
+}
+
+function formatQuota(quota) {
+  return new Intl.NumberFormat('en-US').format(quota);
+}
+
+function renderTopupPage() {
+  const rows = Object.entries(plans).map(([key, plan]) => {
+    const price = key === 'starter' ? '$1' : key === 'plus' ? '$5' : '$10';
+    return `
+      <article class="plan">
+        <div>
+          <h2>${plan.name.replace('NexaRelay ', '').replace(' Credits', '')}</h2>
+          <p>${formatQuota(plan.quota)} quota credits</p>
+        </div>
+        <strong>${price}</strong>
+        <button data-plan="${key}">Buy ${key[0].toUpperCase()}${key.slice(1)}</button>
+      </article>`;
+  }).join('');
+
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NexaRelay Top-up</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, "Microsoft YaHei", sans-serif; color: #111827; background: #f7f7fb; }
+    main { width: min(920px, calc(100% - 32px)); margin: 48px auto; }
+    h1 { margin: 0 0 8px; font-size: 36px; }
+    .lead { margin: 0 0 28px; color: #4b5563; line-height: 1.6; }
+    .box { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, .06); }
+    label { display: block; margin-bottom: 8px; font-weight: 700; }
+    input { width: 100%; min-height: 48px; border: 1px solid #d1d5db; border-radius: 6px; padding: 0 14px; font-size: 16px; }
+    .hint { margin: 8px 0 22px; color: #6b7280; font-size: 14px; }
+    .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .plan { display: grid; gap: 14px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; background: #fcfcfd; }
+    .plan h2 { margin: 0; font-size: 20px; }
+    .plan p { margin: 6px 0 0; color: #6b7280; }
+    .plan strong { font-size: 30px; }
+    button { min-height: 46px; border: 0; border-radius: 6px; background: #111827; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
+    .notice { margin-top: 18px; color: #6b7280; font-size: 14px; line-height: 1.6; }
+    @media (max-width: 760px) { main { margin-top: 28px; } .plans { grid-template-columns: 1fr; } h1 { font-size: 28px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>NexaRelay API Top-up</h1>
+    <p class="lead">输入你的 NexaRelay 用户名，选择套餐并完成 Creem 支付。支付成功后额度会自动到账。</p>
+    <section class="box">
+      <label for="username">NexaRelay 用户名</label>
+      <input id="username" autocomplete="username" placeholder="例如 ft0717">
+      <p class="hint">请填写登录 NexaRelay 时使用的用户名，填错会导致额度无法自动到账。</p>
+      <div class="plans">${rows}</div>
+      <p class="notice">测试阶段为 Creem Test Mode。正式上线前需要切换为正式 API Key、正式 Webhook 和正式 Product ID。</p>
+    </section>
+  </main>
+  <script>
+    const input = document.querySelector('#username');
+    const params = new URLSearchParams(location.search);
+    input.value = params.get('username') || '';
+    document.querySelectorAll('button[data-plan]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const username = input.value.trim();
+        if (!username) {
+          input.focus();
+          alert('请先填写 NexaRelay 用户名');
+          return;
+        }
+        const checkout = new URL('/checkout', location.origin);
+        checkout.searchParams.set('plan', button.dataset.plan);
+        checkout.searchParams.set('username', username);
+        location.href = checkout.toString();
+      });
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function renderSuccessPage(planKey) {
+  const plan = plans[planKey];
+  const quotaText = plan ? `${formatQuota(plan.quota)} quota credits` : 'quota credits';
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Payment received</title>
+  <style>
+    body { margin: 0; font-family: Arial, "Microsoft YaHei", sans-serif; color: #111827; background: #f7f7fb; }
+    main { width: min(680px, calc(100% - 32px)); margin: 72px auto; padding: 28px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; text-align: center; }
+    h1 { margin: 0 0 12px; }
+    p { color: #4b5563; line-height: 1.7; }
+    a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; margin-top: 12px; padding: 0 18px; border-radius: 6px; background: #111827; color: #fff; text-decoration: none; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>支付已收到</h1>
+    <p>你的 ${quotaText} 会在 webhook 确认后自动到账。通常只需要等待几秒，然后刷新 NexaRelay 余额页面。</p>
+    <a href="${(env.ONE_API_BASE_URL || 'https://api.getnexarelay.com').replace(/\/$/, '')}/topup">返回 NexaRelay</a>
+  </main>
+</body>
+</html>`;
+}
+
 function requireEnv(name) {
   if (!env[name]) throw new Error(`Missing required environment variable: ${name}`);
   return env[name];
@@ -343,6 +457,9 @@ async function route(req, res) {
     if (req.method === 'GET' && url.pathname === '/health') {
       return json(res, 200, { ok: true });
     }
+    if (req.method === 'GET' && url.pathname === '/') {
+      return html(res, 200, renderTopupPage());
+    }
     if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/checkout') {
       return await handleCheckout(req, res, url);
     }
@@ -353,7 +470,7 @@ async function route(req, res) {
       return await handleWebhook(req, res);
     }
     if (req.method === 'GET' && url.pathname === '/success') {
-      return text(res, 200, 'Payment received. Your NexaRelay quota will be updated after webhook confirmation.');
+      return html(res, 200, renderSuccessPage(url.searchParams.get('plan')));
     }
     return json(res, 404, { success: false, message: 'not found' });
   } catch (error) {
