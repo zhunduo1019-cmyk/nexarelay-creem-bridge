@@ -72,15 +72,17 @@ function renderTopupPage() {
       </article>`;
   }).join('');
 
+  const oneApiBase = (env.ONE_API_BASE_URL || 'https://api.getnexarelay.com').replace(/\/$/, '');
+
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>NexaRelay Top-up</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Arial, "Microsoft YaHei", sans-serif; color: #111827; background: #f7f7fb; }
+    body { margin: 0; font-family: Arial, sans-serif; color: #111827; background: #f7f7fb; }
     main { width: min(920px, calc(100% - 32px)); margin: 48px auto; }
     h1 { margin: 0 0 8px; font-size: 36px; }
     .lead { margin: 0 0 28px; color: #4b5563; line-height: 1.6; }
@@ -95,19 +97,26 @@ function renderTopupPage() {
     .plan strong { font-size: 30px; }
     button { min-height: 46px; border: 0; border-radius: 6px; background: #111827; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
     .notice { margin-top: 18px; color: #6b7280; font-size: 14px; line-height: 1.6; }
+    .trust { margin-top: 18px; display: grid; gap: 8px; color: #4b5563; font-size: 14px; line-height: 1.6; }
+    .trust a { color: #2563eb; }
     @media (max-width: 760px) { main { margin-top: 28px; } .plans { grid-template-columns: 1fr; } h1 { font-size: 28px; } }
   </style>
 </head>
 <body>
   <main>
     <h1>NexaRelay API Top-up</h1>
-    <p class="lead">输入你的 NexaRelay 用户名，选择套餐并完成 Creem 支付。支付成功后额度会自动到账。</p>
+    <p class="lead">Affordable AI API credits for Southeast Asian developers. Enter your NexaRelay username, choose a credit package, and complete payment through Creem. Credits are added automatically after payment confirmation.</p>
     <section class="box">
-      <label for="username">NexaRelay 用户名</label>
-      <input id="username" autocomplete="username" placeholder="例如 ft0717">
-      <p class="hint">请填写登录 NexaRelay 时使用的用户名，填错会导致额度无法自动到账。</p>
+      <label for="username">NexaRelay username</label>
+      <input id="username" autocomplete="username" placeholder="Example: ft0717">
+      <p class="hint">Use the same username you use to sign in to NexaRelay. Credits cannot be delivered automatically if the username is incorrect.</p>
       <div class="plans">${rows}</div>
-      <p class="notice">测试阶段为 Creem Test Mode。正式上线前需要切换为正式 API Key、正式 Webhook 和正式 Product ID。</p>
+      <p class="notice">Payments are processed securely by Creem. For payment, account, or API access issues, contact support@getnexarelay.com.</p>
+      <div class="trust">
+        <div>API Base URL: <code>https://api.getnexarelay.com/v1</code></div>
+        <div>Privacy Policy and Terms of Service are available on the NexaRelay About page.</div>
+        <div><a href="${oneApiBase}/about">Open NexaRelay About page</a></div>
+      </div>
     </section>
   </main>
   <script>
@@ -119,7 +128,7 @@ function renderTopupPage() {
         const username = input.value.trim();
         if (!username) {
           input.focus();
-          alert('请先填写 NexaRelay 用户名');
+          alert('Please enter your NexaRelay username first.');
           return;
         }
         const checkout = new URL('/checkout', location.origin);
@@ -137,13 +146,13 @@ function renderSuccessPage(planKey) {
   const plan = plans[planKey];
   const quotaText = plan ? `${formatQuota(plan.quota)} quota credits` : 'quota credits';
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Payment received</title>
   <style>
-    body { margin: 0; font-family: Arial, "Microsoft YaHei", sans-serif; color: #111827; background: #f7f7fb; }
+    body { margin: 0; font-family: Arial, sans-serif; color: #111827; background: #f7f7fb; }
     main { width: min(680px, calc(100% - 32px)); margin: 72px auto; padding: 28px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; text-align: center; }
     h1 { margin: 0 0 12px; }
     p { color: #4b5563; line-height: 1.7; }
@@ -152,9 +161,9 @@ function renderSuccessPage(planKey) {
 </head>
 <body>
   <main>
-    <h1>支付已收到</h1>
-    <p>你的 ${quotaText} 会在 webhook 确认后自动到账。通常只需要等待几秒，然后刷新 NexaRelay 余额页面。</p>
-    <a href="${(env.ONE_API_BASE_URL || 'https://api.getnexarelay.com').replace(/\/$/, '')}/topup">返回 NexaRelay</a>
+    <h1>Payment received</h1>
+    <p>Your ${quotaText} will be added automatically after webhook confirmation. This usually takes a few seconds. Please refresh your NexaRelay balance page after returning.</p>
+    <a href="${(env.ONE_API_BASE_URL || 'https://api.getnexarelay.com').replace(/\/$/, '')}/topup">Return to NexaRelay</a>
   </main>
 </body>
 </html>`;
