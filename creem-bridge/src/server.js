@@ -74,70 +74,25 @@ function renderTopupPage() {
 
   const oneApiBase = (env.ONE_API_BASE_URL || 'https://api.getnexarelay.com').replace(/\/$/, '');
 
-  return `<!doctype html>
+     return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <title>NexaRelay Payments Unavailable</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NexaRelay Top-up</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: Arial, sans-serif; color: #111827; background: #f7f7fb; }
-    main { width: min(920px, calc(100% - 32px)); margin: 48px auto; }
-    h1 { margin: 0 0 8px; font-size: 36px; }
-    .lead { margin: 0 0 28px; color: #4b5563; line-height: 1.6; }
-    .box { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, .06); }
-    label { display: block; margin-bottom: 8px; font-weight: 700; }
-    input { width: 100%; min-height: 48px; border: 1px solid #d1d5db; border-radius: 6px; padding: 0 14px; font-size: 16px; }
-    .hint { margin: 8px 0 22px; color: #6b7280; font-size: 14px; }
-    .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-    .plan { display: grid; gap: 14px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; background: #fcfcfd; }
-    .plan h2 { margin: 0; font-size: 20px; }
-    .plan p { margin: 6px 0 0; color: #6b7280; }
-    .plan strong { font-size: 30px; }
-    button { min-height: 46px; border: 0; border-radius: 6px; background: #111827; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
-    .notice { margin-top: 18px; color: #6b7280; font-size: 14px; line-height: 1.6; }
-    .trust { margin-top: 18px; display: grid; gap: 8px; color: #4b5563; font-size: 14px; line-height: 1.6; }
-    .trust a { color: #2563eb; }
-    @media (max-width: 760px) { main { margin-top: 28px; } .plans { grid-template-columns: 1fr; } h1 { font-size: 28px; } }
-  </style>
 </head>
 <body>
-  <main>
-    <h1>NexaRelay API Top-up</h1>
-    <p class="lead">Affordable AI API credits for Southeast Asian developers. Enter your NexaRelay username, choose a credit package, and complete payment through Creem. Credits are added automatically after payment confirmation.</p>
-    <section class="box">
-      <label for="username">NexaRelay username</label>
-      <input id="username" autocomplete="username" placeholder="Example: ft0717">
-      <p class="hint">Use the same username you use to sign in to NexaRelay. Credits cannot be delivered automatically if the username is incorrect.</p>
-      <div class="plans">${rows}</div>
-      <p class="notice">Payments are processed securely by Creem. For payment, account, or API access issues, contact support@getnexarelay.com.</p>
-      <div class="trust">
-        <div>API Base URL: <code>https://api.getnexarelay.com/v1</code></div>
-        <div>Privacy Policy and Terms of Service are available on the NexaRelay About page.</div>
-        <div><a href="${oneApiBase}/about">Open NexaRelay About page</a></div>
-      </div>
-    </section>
+  <main style="max-width:760px;margin:48px auto;font-family:Arial,sans-serif;line-height:1.6;padding:0 20px;color:#111827;">
+    <h1>NexaRelay Payments</h1>
+    <p><strong>Online card top-ups are currently unavailable.</strong></p>
+    <p>NexaRelay is updating its billing provider. Please do not attempt to make a payment through this page.</p>
+    <p>For account access or billing questions, contact <a href="mailto:support@getnexarelay.com">support@getnexarelay.com</a>.</p>
+    <p>
+      <a href="https://api.getnexarelay.com/pricing">Pricing</a> |
+      <a href="https://api.getnexarelay.com/terms">Terms of Service</a> |
+      <a href="https://api.getnexarelay.com/privacy">Privacy Policy</a>
+    </p>
   </main>
-  <script>
-    const input = document.querySelector('#username');
-    const params = new URLSearchParams(location.search);
-    input.value = params.get('username') || '';
-    document.querySelectorAll('button[data-plan]').forEach((button) => {
-      button.addEventListener('click', () => {
-        const username = input.value.trim();
-        if (!username) {
-          input.focus();
-          alert('Please enter your NexaRelay username first.');
-          return;
-        }
-        const checkout = new URL('/checkout', location.origin);
-        checkout.searchParams.set('plan', button.dataset.plan);
-        checkout.searchParams.set('username', username);
-        location.href = checkout.toString();
-      });
-    });
-  </script>
 </body>
 </html>`;
 }
@@ -470,11 +425,17 @@ async function route(req, res) {
       return html(res, 200, renderTopupPage());
     }
     if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/checkout') {
-      return await handleCheckout(req, res, url);
-    }
-    if (req.method === 'POST' && url.pathname === '/api/payment/creem/checkout') {
-      return await handleCheckout(req, res, url);
-    }
+  return json(res, 503, {
+    success: false,
+    message: 'Online card top-ups are currently unavailable.'
+  });
+}
+   if (req.method === 'POST' && url.pathname === '/api/payment/creem/checkout') {
+  return json(res, 503, {
+    success: false,
+    message: 'Online card top-ups are currently unavailable.'
+  });
+}
     if (req.method === 'POST' && url.pathname === '/api/payment/creem/webhook') {
       return await handleWebhook(req, res);
     }
