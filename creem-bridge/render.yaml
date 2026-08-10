@@ -5,7 +5,7 @@ services:
     plan: free
     rootDir: creem-bridge
     buildCommand: ""
-    startCommand: "node src/server.js"
+    startCommand: "node src/migrate.js && node src/server.js"
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -16,17 +16,17 @@ services:
         sync: false
       - key: ONE_API_BASE_URL
         value: https://api.getnexarelay.com
-      - key: CREEM_API_BASE_URL
-        value: https://api.creem.io
-      - key: CREEM_API_KEY
+      - key: DATABASE_URL
         sync: false
-      - key: CREEM_WEBHOOK_SECRET
+      - key: PAYMENT_PUBLIC_ENABLED
+        value: "false"
+      - key: PAYPAL_MODE
+        value: sandbox
+      - key: PAYPAL_CLIENT_ID
         sync: false
-      - key: CREEM_PRODUCT_STARTER
+      - key: PAYPAL_CLIENT_SECRET
         sync: false
-      - key: CREEM_PRODUCT_PLUS
-        sync: false
-      - key: CREEM_PRODUCT_PRO
+      - key: PAYPAL_WEBHOOK_ID
         sync: false
       - key: ONE_API_ADMIN_TOKEN
         sync: false
