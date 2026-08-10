@@ -21,12 +21,13 @@ async function accessToken() {
   return body.access_token;
 }
 
-async function apiRequest(path, { method = 'GET', body } = {}) {
+async function apiRequest(path, { method = 'GET', body, requestId } = {}) {
   const response = await fetch(`${paypalBaseUrl()}${path}`, {
     method,
     headers: {
       authorization: `Bearer ${await accessToken()}`,
       'content-type': 'application/json',
+      ...(requestId ? { 'paypal-request-id': requestId } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -35,27 +36,50 @@ async function apiRequest(path, { method = 'GET', body } = {}) {
   return result;
 }
 
+export function buildPaypalOrderRequest(order, publicBaseUrl) {
+  const baseUrl = requireConfig(publicBaseUrl, 'PUBLIC_BASE_URL').replace(/\/+$/, '');
+  const orderStatusUrl = `${baseUrl}/api/payment/orders/${encodeURIComponent(order.id)}`;
+
+  return {
+    intent: 'CAPTURE',
+    payment_source: {
+      paypal: {
+        experience_context: {
+          brand_name: 'NexaRelay',
+          shipping_preference: 'NO_SHIPPING',
+          user_action: 'PAY_NOW',
+          return_url: orderStatusUrl,
+          cancel_url: `${orderStatusUrl}?paypal=cancelled`,
+        },
+      },
+    },
+    purchase_units: [{
+      reference_id: order.id,
+      custom_id: order.id,
+      invoice_id: order.id,
+      description: `${order.plan_key} prepaid API usage credits`,
+      amount: {
+        currency_code: order.currency,
+        value: (order.amount_cents / 100).toFixed(2),
+      },
+    }],
+  };
+}
+
 export async function createPaypalOrder(order) {
+  const settings = config();
   return apiRequest('/v2/checkout/orders', {
     method: 'POST',
-    body: {
-      intent: 'CAPTURE',
-      purchase_units: [{
-        reference_id: order.id,
-        custom_id: order.id,
-        invoice_id: order.id,
-        description: `${order.plan_key} prepaid API usage credits`,
-        amount: {
-          currency_code: order.currency,
-          value: (order.amount_cents / 100).toFixed(2),
-        },
-      }],
-    },
+    requestId: `create:${order.id}`,
+    body: buildPaypalOrderRequest(order, settings.publicBaseUrl),
   });
 }
 
 export async function capturePaypalOrder(providerOrderId) {
-  return apiRequest(`/v2/checkout/orders/${encodeURIComponent(providerOrderId)}/capture`, { method: 'POST' });
+  return apiRequest(`/v2/checkout/orders/${encodeURIComponent(providerOrderId)}/capture`, {
+    method: 'POST',
+    requestId: `capture:${providerOrderId}`,
+  });
 }
 
 export async function verifyPaypalWebhook(headers, event) {

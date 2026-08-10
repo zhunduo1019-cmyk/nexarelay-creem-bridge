@@ -15,6 +15,7 @@ export function config() {
   if (!['sandbox', 'live'].includes(mode)) throw new Error('PAYPAL_MODE must be sandbox or live');
 
   return {
+    publicBaseUrl: process.env.PUBLIC_BASE_URL,
     databaseUrl: process.env.DATABASE_URL,
     oneApiBaseUrl: process.env.ONE_API_BASE_URL,
     oneApiAdminToken: process.env.ONE_API_ADMIN_TOKEN,

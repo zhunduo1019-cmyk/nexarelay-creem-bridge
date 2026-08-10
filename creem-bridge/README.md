@@ -5,6 +5,8 @@ This service is a deliberately closed-by-default payment bridge for NexaRelay.
 - The historical Creem endpoints return unavailable or gone responses.
 - Public payment creation remains disabled unless `PAYMENT_PUBLIC_ENABLED=true`.
 - The PayPal order amount, currency, and credits are selected only from the server-side plan table.
+- PayPal checkout uses `PAY_NOW` with no shipping because all plans deliver digital API credits.
+- Approval and cancellation return to the bridge's read-only order status route under `PUBLIC_BASE_URL`.
 - PostgreSQL stores orders, webhook events, and credit deliveries.
 - A delivery that may have reached One API but lacks a final acknowledgement is sent to `review_required`; it is never blindly retried.
 
