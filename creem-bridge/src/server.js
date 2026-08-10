@@ -4,6 +4,7 @@ import { getPlan, config } from './config.js';
 import { query, withTransaction } from './db.js';
 import { createPaypalOrder, capturePaypalOrder, verifyPaypalWebhook } from './paypal.js';
 import { addQuota } from './oneapi.js';
+import { paymentResultPage, paypalReturnTokenMatches } from './pages.js';
 
 const port = Number(process.env.PORT || 8787);
 
@@ -11,6 +12,19 @@ function json(res, status, body) {
   const payload = JSON.stringify(body);
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(payload), 'cache-control': 'no-store' });
   res.end(payload);
+}
+
+function html(res, status, body) {
+  res.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': Buffer.byteLength(body),
+    'cache-control': 'no-store',
+    'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    'referrer-policy': 'no-referrer',
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+  });
+  res.end(body);
 }
 
 async function readJson(req) {
@@ -142,17 +156,103 @@ function captureMatchesOrder(capture, order) {
     && captureData.amount?.currency_code === order.currency && centsFromAmount(captureData.amount) === Number(order.amount_cents);
 }
 
-async function captureOrder(req, res, localOrderId) {
-  if (!paymentAccessAllowed(req)) return json(res, 503, { success: false, message: 'Online card top-ups are currently unavailable.' });
+async function settleCapturedOrder(localOrderId) {
   const found = await query('SELECT * FROM orders WHERE id = $1', [localOrderId]);
   const order = found.rows[0];
-  if (!order) return json(res, 404, { success: false, message: 'order not found' });
-  if (order.status === 'credited') return json(res, 200, { success: true, data: { orderId: order.id, status: order.status } });
+  if (!order) return { missing: true };
+  if (order.status === 'credited') return { order, alreadyCredited: true };
+  if (!order.provider_order_id) throw new Error('PayPal provider order is missing');
+
   const capture = await capturePaypalOrder(order.provider_order_id);
-  if (!captureMatchesOrder(capture, order)) return json(res, 409, { success: false, message: 'PayPal capture does not match this order' });
+  if (!captureMatchesOrder(capture, order)) throw new Error('PayPal capture does not match this order');
   const captureId = capture.purchase_units[0].payments.captures[0].id;
   const settled = await markPaidAndDeliver(order.provider_order_id, `capture:${captureId}`, 'PAYMENT.CAPTURE.COMPLETED', capture);
-  return json(res, 200, { success: true, data: { orderId: order.id, captureStatus: capture.status, delivery: settled.delivery?.action || null } });
+  const currentResult = await query('SELECT * FROM orders WHERE id = $1', [localOrderId]);
+  return { order: currentResult.rows[0] || order, capture, settled };
+}
+
+async function captureOrder(req, res, localOrderId) {
+  if (!paymentAccessAllowed(req)) return json(res, 503, { success: false, message: 'Online card top-ups are currently unavailable.' });
+  const result = await settleCapturedOrder(localOrderId);
+  if (result.missing) return json(res, 404, { success: false, message: 'order not found' });
+  if (result.alreadyCredited) return json(res, 200, { success: true, data: { orderId: result.order.id, status: result.order.status } });
+  return json(res, 200, {
+    success: true,
+    data: {
+      orderId: result.order.id,
+      captureStatus: result.capture.status,
+      delivery: result.settled.delivery?.action || result.order.status,
+    },
+  });
+}
+
+function accountUrl() {
+  const baseUrl = config().oneApiBaseUrl;
+  if (!baseUrl) return null;
+  try {
+    return new URL('/user', baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+async function paypalReturn(res, url, localOrderId) {
+  const found = await query('SELECT * FROM orders WHERE id = $1', [localOrderId]);
+  const order = found.rows[0];
+  if (!order) return html(res, 404, paymentResultPage({
+    title: '订单不存在', heading: '找不到这笔订单', message: '请返回 NexaRelay 后重新发起支付。', tone: 'error', accountUrl: accountUrl(),
+  }));
+
+  if (!paypalReturnTokenMatches(order, url.searchParams.get('token'))) return html(res, 400, paymentResultPage({
+    title: '支付返回无效', heading: '无法验证 PayPal 返回', message: '订单标识不匹配，系统没有执行捕获。', tone: 'error', order, accountUrl: accountUrl(),
+  }));
+
+  const retryUrl = `${url.pathname}${url.search}`;
+  if (order.status === 'credited') return html(res, 200, paymentResultPage({
+    title: '支付成功', heading: '支付完成，额度已到账', message: '这笔订单已经处理完成，无需重复操作。', tone: 'success', order, accountUrl: accountUrl(),
+  }));
+  if (order.status === 'review_required') return html(res, 202, paymentResultPage({
+    title: '订单待复核', heading: '付款正在人工复核', message: '请勿再次付款。管理员会根据订单账本处理。', tone: 'error', order, accountUrl: accountUrl(),
+  }));
+
+  try {
+    const result = await settleCapturedOrder(localOrderId);
+    if (result.order.status === 'credited') return html(res, 200, paymentResultPage({
+      title: '支付成功', heading: '支付完成，额度已到账', message: 'PayPal 已确认付款，NexaRelay 额度已经发放。', tone: 'success', order: result.order, accountUrl: accountUrl(),
+    }));
+    return html(res, 202, paymentResultPage({
+      title: '正在处理', heading: '付款已确认，正在发放额度', message: '页面会自动刷新，请勿再次付款。', tone: 'pending', order: result.order, accountUrl: accountUrl(), retryUrl,
+    }));
+  } catch (error) {
+    console.error('PayPal return capture failed:', error.message);
+    const currentResult = await query('SELECT * FROM orders WHERE id = $1', [localOrderId]);
+    const currentOrder = currentResult.rows[0] || order;
+    const needsReview = currentOrder.status === 'review_required';
+    return html(res, needsReview ? 202 : 503, paymentResultPage({
+      title: needsReview ? '订单待复核' : '支付处理中',
+      heading: needsReview ? '付款正在人工复核' : '暂时无法确认付款',
+      message: needsReview ? '请勿再次付款。管理员会根据订单账本处理。' : 'PayPal 状态暂未确认，请稍后刷新本页。',
+      tone: needsReview ? 'error' : 'pending',
+      order: currentOrder,
+      accountUrl: accountUrl(),
+      retryUrl: needsReview ? null : retryUrl,
+    }));
+  }
+}
+
+async function paypalCancel(res, url, localOrderId) {
+  const found = await query('SELECT * FROM orders WHERE id = $1', [localOrderId]);
+  const order = found.rows[0];
+  if (!order) return html(res, 404, paymentResultPage({
+    title: '订单不存在', heading: '找不到这笔订单', message: '请返回 NexaRelay 后重新发起支付。', tone: 'error', accountUrl: accountUrl(),
+  }));
+  const token = url.searchParams.get('token');
+  if (token && !paypalReturnTokenMatches(order, token)) return html(res, 400, paymentResultPage({
+    title: '支付返回无效', heading: '无法验证 PayPal 返回', message: '订单标识不匹配，系统没有更改订单。', tone: 'error', order, accountUrl: accountUrl(),
+  }));
+  return html(res, 200, paymentResultPage({
+    title: '支付已取消', heading: '支付已取消', message: '系统没有捕获这笔付款，也没有发放额度。', tone: 'pending', order, accountUrl: accountUrl(),
+  }));
 }
 
 async function handlePaypalWebhook(req, res) {
@@ -188,6 +288,8 @@ async function route(req, res) {
     if (req.method === 'POST' && url.pathname === '/api/payment/paypal/orders') return createOrder(req, res);
     if (req.method === 'POST' && /^\/api\/payment\/paypal\/orders\/[^/]+\/capture$/.test(url.pathname)) return captureOrder(req, res, url.pathname.split('/')[5]);
     if (req.method === 'POST' && url.pathname === '/api/payment/paypal/webhook') return handlePaypalWebhook(req, res);
+    if (req.method === 'GET' && /^\/api\/payment\/paypal\/return\/[^/]+$/.test(url.pathname)) return paypalReturn(res, url, url.pathname.split('/').pop());
+    if (req.method === 'GET' && /^\/api\/payment\/paypal\/cancel\/[^/]+$/.test(url.pathname)) return paypalCancel(res, url, url.pathname.split('/').pop());
     if (req.method === 'GET' && /^\/api\/payment\/orders\/[^/]+$/.test(url.pathname)) return orderStatus(res, url.pathname.split('/').pop());
     return json(res, 404, { success: false, message: 'not found' });
   } catch (error) {

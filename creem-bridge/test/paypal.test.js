@@ -17,8 +17,8 @@ test('PayPal order uses a pay-now flow for digital credits', () => {
     brand_name: 'NexaRelay',
     shipping_preference: 'NO_SHIPPING',
     user_action: 'PAY_NOW',
-    return_url: 'https://pay.getnexarelay.com/api/payment/orders/order%2Fwith%20spaces',
-    cancel_url: 'https://pay.getnexarelay.com/api/payment/orders/order%2Fwith%20spaces?paypal=cancelled',
+    return_url: 'https://pay.getnexarelay.com/api/payment/paypal/return/order%2Fwith%20spaces',
+    cancel_url: 'https://pay.getnexarelay.com/api/payment/paypal/cancel/order%2Fwith%20spaces',
   });
   assert.deepEqual(request.purchase_units, [{
     reference_id: order.id,

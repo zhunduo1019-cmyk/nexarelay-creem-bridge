@@ -35,10 +35,14 @@ GET   /health
 POST  /api/payment/paypal/orders
 POST  /api/payment/paypal/orders/:orderId/capture
 POST  /api/payment/paypal/webhook
+GET   /api/payment/paypal/return/:orderId
+GET   /api/payment/paypal/cancel/:orderId
 GET   /api/payment/orders/:orderId
 ```
 
 `POST /api/payment/paypal/orders` requires `plan`, `userId`, and `username`. It rejects browser-supplied prices or credits because those fields are not part of the request contract.
+
+PayPal redirects approved buyers to the return route. The route verifies PayPal's `token` against the stored provider order ID, captures the approved order with an idempotency key, delivers credits once, and renders a user-facing result page. The cancel route never captures an order.
 
 ## Secrets
 

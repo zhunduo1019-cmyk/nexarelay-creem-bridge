@@ -21,13 +21,14 @@ async function accessToken() {
   return body.access_token;
 }
 
-async function apiRequest(path, { method = 'GET', body, requestId } = {}) {
+async function apiRequest(path, { method = 'GET', body, requestId, prefer } = {}) {
   const response = await fetch(`${paypalBaseUrl()}${path}`, {
     method,
     headers: {
       authorization: `Bearer ${await accessToken()}`,
       'content-type': 'application/json',
       ...(requestId ? { 'paypal-request-id': requestId } : {}),
+      ...(prefer ? { prefer } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -38,7 +39,8 @@ async function apiRequest(path, { method = 'GET', body, requestId } = {}) {
 
 export function buildPaypalOrderRequest(order, publicBaseUrl) {
   const baseUrl = requireConfig(publicBaseUrl, 'PUBLIC_BASE_URL').replace(/\/+$/, '');
-  const orderStatusUrl = `${baseUrl}/api/payment/orders/${encodeURIComponent(order.id)}`;
+  const paypalReturnUrl = `${baseUrl}/api/payment/paypal/return/${encodeURIComponent(order.id)}`;
+  const paypalCancelUrl = `${baseUrl}/api/payment/paypal/cancel/${encodeURIComponent(order.id)}`;
 
   return {
     intent: 'CAPTURE',
@@ -48,8 +50,8 @@ export function buildPaypalOrderRequest(order, publicBaseUrl) {
           brand_name: 'NexaRelay',
           shipping_preference: 'NO_SHIPPING',
           user_action: 'PAY_NOW',
-          return_url: orderStatusUrl,
-          cancel_url: `${orderStatusUrl}?paypal=cancelled`,
+          return_url: paypalReturnUrl,
+          cancel_url: paypalCancelUrl,
         },
       },
     },
@@ -79,6 +81,7 @@ export async function capturePaypalOrder(providerOrderId) {
   return apiRequest(`/v2/checkout/orders/${encodeURIComponent(providerOrderId)}/capture`, {
     method: 'POST',
     requestId: `capture:${providerOrderId}`,
+    prefer: 'return=representation',
   });
 }
 
