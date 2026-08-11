@@ -18,11 +18,13 @@ test('refunded capture is linked by capture id', () => {
     event_type: 'PAYMENT.CAPTURE.REFUNDED',
     resource: {
       id: 'REFUND-1',
+      invoice_id: '11111111-1111-4111-8111-111111111111',
       amount: { value: '1.00', currency_code: 'USD' },
-      supplementary_data: { related_ids: { capture_id: 'CAPTURE-1' } },
+      links: [{ rel: 'up', href: 'https://api-m.sandbox.paypal.com/v2/payments/captures/CAPTURE-1' }],
     },
   }), {
-    adjustmentType: 'refund', providerAdjustmentId: 'REFUND-1', providerOrderId: null,
+    adjustmentType: 'refund', providerAdjustmentId: 'REFUND-1',
+    localOrderId: '11111111-1111-4111-8111-111111111111', providerOrderId: null,
     captureId: 'CAPTURE-1', amountCents: 100, currency: 'USD', status: 'refunded',
     reason: null, financialStatus: 'partially_refunded',
   });
@@ -37,6 +39,7 @@ test('capture reversal retains both order and capture identifiers', () => {
     },
   });
   assert.equal(result.adjustmentType, 'reversal');
+  assert.equal(result.localOrderId, null);
   assert.equal(result.providerOrderId, 'ORDER-2');
   assert.equal(result.captureId, 'CAPTURE-2');
   assert.equal(result.financialStatus, 'reversed');
@@ -58,6 +61,7 @@ test('dispute is linked by seller transaction id and preserves outcome', () => {
     },
   });
   assert.equal(result.providerAdjustmentId, 'PP-D-1');
+  assert.equal(result.localOrderId, null);
   assert.equal(result.captureId, 'CAPTURE-3');
   assert.equal(result.amountCents, 50);
   assert.equal(result.status, 'resolved');

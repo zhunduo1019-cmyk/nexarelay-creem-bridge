@@ -25,6 +25,13 @@ function disputeOutcome(resource) {
     || null;
 }
 
+function captureIdFromLinks(links) {
+  const href = links?.find((link) => link?.rel === 'up' && /\/v2\/payments\/captures\//.test(link?.href || ''))?.href;
+  if (!href) return null;
+  const match = href.match(/\/v2\/payments\/captures\/([^/?#]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export function describeFinancialEvent(event) {
   if (!financialEventTypes.has(event?.event_type)) return null;
   const resource = event.resource || {};
@@ -40,6 +47,7 @@ export function describeFinancialEvent(event) {
     return {
       adjustmentType: 'dispute',
       providerAdjustmentId: resource.dispute_id || resource.id || null,
+      localOrderId: resource.invoice_id || null,
       providerOrderId: null,
       captureId: transaction?.seller_transaction_id || null,
       amountCents: centsFromFinancialAmount(resource.dispute_amount),
@@ -55,6 +63,7 @@ export function describeFinancialEvent(event) {
     return {
       adjustmentType: 'reversal',
       providerAdjustmentId: resource.id || null,
+      localOrderId: resource.invoice_id || null,
       providerOrderId: relatedIds.order_id || null,
       captureId: resource.id || relatedIds.capture_id || null,
       amountCents: centsFromFinancialAmount(resource.amount),
@@ -73,8 +82,9 @@ export function describeFinancialEvent(event) {
   return {
     adjustmentType: 'refund',
     providerAdjustmentId: resource.id || null,
+    localOrderId: resource.invoice_id || null,
     providerOrderId: relatedIds.order_id || null,
-    captureId: relatedIds.capture_id || null,
+    captureId: relatedIds.capture_id || captureIdFromLinks(resource.links),
     amountCents: centsFromFinancialAmount(resource.amount),
     currency: resource.amount?.currency_code || null,
     status: statusByType[type],

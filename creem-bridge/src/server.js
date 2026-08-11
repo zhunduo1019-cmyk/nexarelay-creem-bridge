@@ -422,16 +422,21 @@ function financialReviewMessage(event, descriptor, issue) {
 
 async function recordFinancialAdjustment(event, descriptor) {
   return withTransaction(async (client) => {
+    const orderByLocalResult = descriptor.localOrderId && validOrderId(descriptor.localOrderId)
+      ? await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [descriptor.localOrderId])
+      : { rows: [] };
     const orderByProviderResult = descriptor.providerOrderId
       ? await client.query('SELECT * FROM orders WHERE provider_order_id = $1 FOR UPDATE', [descriptor.providerOrderId])
       : { rows: [] };
     const orderByCaptureResult = descriptor.captureId
       ? await client.query('SELECT * FROM orders WHERE capture_id = $1 FOR UPDATE', [descriptor.captureId])
       : { rows: [] };
+    const orderByLocal = orderByLocalResult.rows[0] || null;
     const orderByProvider = orderByProviderResult.rows[0] || null;
     const orderByCapture = orderByCaptureResult.rows[0] || null;
-    const mappingConflict = orderByProvider && orderByCapture && orderByProvider.id !== orderByCapture.id;
-    const order = mappingConflict ? null : (orderByProvider || orderByCapture);
+    const matchedOrderIds = new Set([orderByLocal?.id, orderByProvider?.id, orderByCapture?.id].filter(Boolean));
+    const mappingConflict = matchedOrderIds.size > 1;
+    const order = mappingConflict ? null : (orderByLocal || orderByProvider || orderByCapture);
 
     const eventInsert = await client.query(`INSERT INTO payment_events
       (provider, provider_event_id, event_type, order_id, payload)
