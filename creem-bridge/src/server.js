@@ -6,7 +6,6 @@ import { query, withTransaction } from './db.js';
 import {
   createPaypalOrder,
   capturePaypalOrder,
-  refundPaypalCapture,
   verifyPaypalWebhook,
 } from './paypal.js';
 import {
@@ -589,27 +588,6 @@ async function financialReviewOrders(req, res, url) {
   });
 }
 
-async function sandboxRefundTest(req, res, orderId) {
-  if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
-  const settings = config();
-  if (settings.paypalMode !== 'sandbox' || settings.paypalLiveEnabled || settings.publicPaymentsEnabled) {
-    return json(res, 409, { success: false, message: 'sandbox refund test is unavailable' });
-  }
-  if (!validOrderId(orderId)) return json(res, 400, { success: false, message: 'invalid order id' });
-  const result = await query(`SELECT id, capture_id, status, financial_status
-    FROM orders WHERE id = $1`, [orderId]);
-  if (!result.rowCount) return json(res, 404, { success: false, message: 'order not found' });
-  const order = result.rows[0];
-  if (order.status !== 'credited' || !order.capture_id || order.financial_status !== 'clear') {
-    return json(res, 409, { success: false, message: 'order is not eligible for a sandbox refund test' });
-  }
-  const refund = await refundPaypalCapture(order.capture_id, order.id);
-  return json(res, 200, {
-    success: true,
-    data: { orderId: order.id, providerRefundId: refund.id, status: refund.status },
-  });
-}
-
 async function retryReviewedOrder(req, res, orderId) {
   if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
   if (!validOrderId(orderId)) return json(res, 400, { success: false, message: 'invalid order id' });
@@ -657,9 +635,6 @@ async function route(req, res) {
     if (req.method === 'GET' && url.pathname === '/api/payment/admin/financial-review') return financialReviewOrders(req, res, url);
     if (req.method === 'POST' && /^\/api\/payment\/admin\/orders\/[^/]+\/retry-credit$/.test(url.pathname)) {
       return retryReviewedOrder(req, res, url.pathname.split('/')[5]);
-    }
-    if (req.method === 'POST' && /^\/api\/payment\/admin\/sandbox\/orders\/[^/]+\/refund-test$/.test(url.pathname)) {
-      return sandboxRefundTest(req, res, url.pathname.split('/')[6]);
     }
     if (req.method === 'GET' && /^\/api\/payment\/paypal\/return\/[^/]+$/.test(url.pathname)) return paypalReturn(res, url, url.pathname.split('/').pop());
     if (req.method === 'GET' && /^\/api\/payment\/paypal\/cancel\/[^/]+$/.test(url.pathname)) return paypalCancel(res, url, url.pathname.split('/').pop());
