@@ -44,6 +44,26 @@ test('admin payment review endpoints require the exact bridge secret', async () 
       assert.equal(accepted.status, 400);
       assert.deepEqual(await accepted.json(), { success: false, message: 'invalid order id' });
 
+      const financialResolveMissing = await fetch(`${baseUrl}/api/payment/admin/orders/not-a-uuid/resolve-financial-review`, {
+        method: 'POST',
+      });
+      assert.equal(financialResolveMissing.status, 401);
+
+      const financialResolveInvalidId = await fetch(`${baseUrl}/api/payment/admin/orders/not-a-uuid/resolve-financial-review`, {
+        method: 'POST',
+        headers: { 'x-bridge-secret': 'bridge-admin-secret' },
+      });
+      assert.equal(financialResolveInvalidId.status, 400);
+      assert.deepEqual(await financialResolveInvalidId.json(), { success: false, message: 'invalid order id' });
+
+      const financialResolveInvalidDecision = await fetch(`${baseUrl}/api/payment/admin/orders/11111111-1111-4111-8111-111111111111/resolve-financial-review`, {
+        method: 'POST',
+        headers: { 'x-bridge-secret': 'bridge-admin-secret', 'content-type': 'application/json' },
+        body: JSON.stringify({ decision: 'delete_everything', operator: 'test', note: 'invalid decision test' }),
+      });
+      assert.equal(financialResolveInvalidDecision.status, 400);
+      assert.deepEqual(await financialResolveInvalidDecision.json(), { success: false, message: 'invalid financial review decision' });
+
     });
   } finally {
     if (previousSecret === undefined) delete process.env.BRIDGE_CHECKOUT_SECRET;

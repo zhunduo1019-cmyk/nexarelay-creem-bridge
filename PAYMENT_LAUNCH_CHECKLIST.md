@@ -87,7 +87,7 @@ Do not enable Live or public payments until every item is complete:
 2. Confirm the delivery-review and financial-review queues are empty.
 3. Completed 2026-08-11: the verified Sandbox refund Webhook was resent and the existing adjustment was not duplicated.
 4. Completed 2026-08-11: a Sandbox dispute completed the `CREATED` -> `UPDATED` -> `RESOLVED` lifecycle, stayed linked to one adjustment, and preserved the credited order for manual review.
-5. Define the operator decision for unused, partially consumed, and fully consumed quota after a refund or buyer-favour dispute.
+5. Completed 2026-08-11: `FINANCIAL_REVIEW_RUNBOOK.md` defines the no-loss, fully recoverable, partially consumed, and fully consumed quota decisions. The bridge records authenticated resolutions but never changes One API quota automatically.
 6. Create a separate Live webhook and subscribe to the same required events.
 7. Store Live credentials and the Live webhook ID only in Render.
 8. Keep `PAYMENT_PUBLIC_ENABLED=false` for the first controlled Live USD 1.00 payment.

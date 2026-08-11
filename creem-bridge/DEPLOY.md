@@ -38,6 +38,8 @@ CUSTOMER.DISPUTE.RESOLVED
 
 Review them through `GET /api/payment/admin/financial-review`. `/health` must report `financialEventLedgerEnabled: true` and `automaticQuotaClawbackEnabled: false`. Financial events are ledgered and flagged for manual review; they never deduct quota automatically.
 
+Use the repository-level `FINANCIAL_REVIEW_RUNBOOK.md` for the required operator decision. After verifying any manual One API change, record the outcome through `POST /api/payment/admin/orders/:orderId/resolve-financial-review`. The endpoint is protected by `x-bridge-secret`, writes the operator, decision, note, and resolution time, and does not change quota or account status itself.
+
 ## Verified Sandbox recovery drill
 
 On 2026-08-11, a controlled post-redemption acknowledgement failure was injected into a USD 1.00 Sandbox order. The order entered `review_required`; the authenticated retry reconciled the already-used single-use redemption, changed the order to `credited`, and removed it from the review queue. The user balance was USD 5.02-equivalent both immediately before and after retry, confirming that recovery did not deliver quota twice. The temporary fault-injection routes were removed after the drill.

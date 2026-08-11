@@ -20,6 +20,7 @@ import {
   captureIdFromCompletedEvent,
   describeFinancialEvent,
 } from './financial-events.js';
+import { financialReviewDecisions } from './financial-review-policy.js';
 
 const port = Number(process.env.PORT || 8787);
 
@@ -481,7 +482,13 @@ async function recordFinancialAdjustment(event, descriptor) {
     }
 
     await client.query(`UPDATE orders
-      SET financial_status = $2, financial_review_required = TRUE, financial_review_reason = $3
+      SET financial_status = $2,
+          financial_review_required = TRUE,
+          financial_review_reason = $3,
+          financial_review_decision = NULL,
+          financial_review_note = NULL,
+          financial_review_resolved_at = NULL,
+          financial_review_resolved_by = NULL
       WHERE id = $1`, [order.id, financialStatus, reviewReason]);
     return { duplicate: false, matched: true, orderId: order.id, status: financialStatus };
   });
@@ -558,7 +565,9 @@ async function financialReviewOrders(req, res, url) {
   const orders = await query(`SELECT
       o.id, o.provider_order_id, o.capture_id, o.user_id, o.username, o.plan_key,
       o.amount_cents, o.currency, o.credits, o.status, o.financial_status,
-      o.financial_review_reason, o.created_at, o.paid_at, o.credited_at, o.updated_at,
+      o.financial_review_reason, o.financial_review_decision, o.financial_review_note,
+      o.financial_review_resolved_at, o.financial_review_resolved_by,
+      o.created_at, o.paid_at, o.credited_at, o.updated_at,
       (SELECT COALESCE(jsonb_agg(jsonb_build_object(
         'adjustmentType', a.adjustment_type,
         'providerAdjustmentId', a.provider_adjustment_id,
@@ -586,6 +595,45 @@ async function financialReviewOrders(req, res, url) {
     success: true,
     data: { orders: orders.rows, unmatchedAdjustments: unmatched.rows },
   });
+}
+
+async function resolveFinancialReview(req, res, orderId) {
+  if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
+  if (!validOrderId(orderId)) return json(res, 400, { success: false, message: 'invalid order id' });
+  const input = await readJson(req);
+  const decision = String(input.decision || '');
+  const operator = String(input.operator || '').trim();
+  const note = String(input.note || '').trim();
+  if (!financialReviewDecisions.includes(decision)) return json(res, 400, { success: false, message: 'invalid financial review decision' });
+  if (!operator || operator.length > 100 || /[\r\n\t]/.test(operator)) return json(res, 400, { success: false, message: 'invalid operator identifier' });
+  if (note.length < 10 || note.length > 1000 || /[\r\n\t]/.test(note)) return json(res, 400, { success: false, message: 'invalid financial review note' });
+
+  const resolved = await withTransaction(async (client) => {
+    const found = await client.query(`SELECT id, financial_status, financial_review_required,
+      financial_review_decision, financial_review_note, financial_review_resolved_at,
+      financial_review_resolved_by FROM orders WHERE id = $1 FOR UPDATE`, [orderId]);
+    if (!found.rowCount) return { action: 'missing' };
+    const existing = found.rows[0];
+    if (!existing.financial_review_required) {
+      const sameResolution = existing.financial_review_decision === decision
+        && existing.financial_review_note === note
+        && existing.financial_review_resolved_by === operator;
+      return { action: sameResolution ? 'duplicate' : 'already_resolved', order: existing };
+    }
+    const updated = await client.query(`UPDATE orders SET
+      financial_review_required = FALSE,
+      financial_review_decision = $2,
+      financial_review_note = $3,
+      financial_review_resolved_at = NOW(),
+      financial_review_resolved_by = $4
+      WHERE id = $1
+      RETURNING id, financial_status, financial_review_decision,
+        financial_review_resolved_at, financial_review_resolved_by`, [orderId, decision, note, operator]);
+    return { action: 'resolved', order: updated.rows[0] };
+  });
+  if (resolved.action === 'missing') return json(res, 404, { success: false, message: 'order not found' });
+  if (resolved.action === 'already_resolved') return json(res, 409, { success: false, message: 'financial review is already resolved' });
+  return json(res, 200, { success: true, duplicate: resolved.action === 'duplicate', data: resolved.order });
 }
 
 async function retryReviewedOrder(req, res, orderId) {
@@ -633,6 +681,9 @@ async function route(req, res) {
     if (req.method === 'POST' && url.pathname === '/api/payment/paypal/webhook') return handlePaypalWebhook(req, res);
     if (req.method === 'GET' && url.pathname === '/api/payment/admin/review-required') return reviewRequiredOrders(req, res, url);
     if (req.method === 'GET' && url.pathname === '/api/payment/admin/financial-review') return financialReviewOrders(req, res, url);
+    if (req.method === 'POST' && /^\/api\/payment\/admin\/orders\/[^/]+\/resolve-financial-review$/.test(url.pathname)) {
+      return resolveFinancialReview(req, res, url.pathname.split('/')[5]);
+    }
     if (req.method === 'POST' && /^\/api\/payment\/admin\/orders\/[^/]+\/retry-credit$/.test(url.pathname)) {
       return retryReviewedOrder(req, res, url.pathname.split('/')[5]);
     }
