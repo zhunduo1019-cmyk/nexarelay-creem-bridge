@@ -16,7 +16,7 @@ async function withServer(work) {
   }
 }
 
-test('admin reconciliation endpoints require the exact bridge secret', async () => {
+test('admin payment review endpoints require the exact bridge secret', async () => {
   const previousSecret = process.env.BRIDGE_CHECKOUT_SECRET;
   process.env.BRIDGE_CHECKOUT_SECRET = 'bridge-admin-secret';
   try {
@@ -28,6 +28,14 @@ test('admin reconciliation endpoints require the exact bridge secret', async () 
         headers: { 'x-bridge-secret': 'wrong-secret' },
       });
       assert.equal(wrong.status, 401);
+
+      const financialMissing = await fetch(`${baseUrl}/api/payment/admin/financial-review`);
+      assert.equal(financialMissing.status, 401);
+
+      const financialWrong = await fetch(`${baseUrl}/api/payment/admin/financial-review`, {
+        headers: { 'x-bridge-secret': 'wrong-secret' },
+      });
+      assert.equal(financialWrong.status, 401);
 
       const accepted = await fetch(`${baseUrl}/api/payment/admin/orders/not-a-uuid/retry-credit`, {
         method: 'POST',

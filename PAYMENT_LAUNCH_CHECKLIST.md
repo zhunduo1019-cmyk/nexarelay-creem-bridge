@@ -1,43 +1,27 @@
-# NexaRelay Payment Launch Checklist
+# NexaRelay PayPal Payment Launch Checklist
 
-This file records the current Creem test setup and the production switch plan.
-Do not store API keys, webhook secrets, or admin tokens in this repository.
+This file records the current PayPal safety state and the remaining production gates. Do not store Client IDs, API secrets, webhook IDs, bridge secrets, database URLs, or One API admin tokens in this repository.
 
-## Current Status
+## Current state
 
-- Creem production payout review has been resubmitted.
-- Creem production payouts are not enabled yet.
-- Render should stay on Creem test mode until Creem approves production payouts.
-- Test checkout, test webhook, and automatic NexaRelay quota top-up have been verified successfully.
-- Public payment domain is verified and active:
-  - `https://pay.getnexarelay.com`
-- Creem webhook URL should be:
-  - `https://pay.getnexarelay.com/api/payment/creem/webhook`
+- PayPal Complete Payments access is approved.
+- PayPal remains in Sandbox mode.
+- Public registration and public payment creation remain disabled.
+- Live credentials are not used.
+- PostgreSQL stores orders, PayPal webhook events, credit deliveries, and financial adjustments.
+- Credit delivery uses a single-use One API redemption and authenticated reconciliation.
+- Refund, reversal, and dispute events are ledgered idempotently and require manual review.
+- Automatic quota clawback is disabled.
 
-## Test Mode Configuration
+## Verified Sandbox controls
 
-Keep these values in Render while production review is pending:
+- USD 1.00 Starter checkout, capture, webhook handling, and quota delivery completed successfully.
+- Repeated return handling did not deliver quota twice.
+- A controlled post-redemption acknowledgement failure entered `review_required`.
+- Authenticated retry repaired the ledger without delivering quota twice.
+- The temporary fault-injection routes were removed after verification.
 
-```text
-CREEM_API_BASE_URL=https://test-api.creem.io
-PUBLIC_BASE_URL=https://pay.getnexarelay.com
-ONE_API_BASE_URL=https://api.getnexarelay.com
-TOPUP_MODE=direct
-ONE_API_AUTH_HEADER=Authorization
-```
-
-The following values must remain secret in Render:
-
-```text
-CREEM_API_KEY=<Creem test API key>
-CREEM_WEBHOOK_SECRET=<Creem test webhook signing secret>
-CREEM_PRODUCT_STARTER=<Creem test Starter product ID>
-CREEM_PRODUCT_PLUS=<Creem test Plus product ID>
-CREEM_PRODUCT_PRO=<Creem test Pro product ID>
-ONE_API_ADMIN_TOKEN=<NexaRelay / One API admin token>
-```
-
-## Pricing and Quota Mapping
+## Server-side pricing
 
 | Plan | Price | Quota Delivered |
 |---|---:|---:|
@@ -45,65 +29,64 @@ ONE_API_ADMIN_TOKEN=<NexaRelay / One API admin token>
 | Plus Credits | USD 5.00 | 2,800,000 quota credits |
 | Pro Credits | USD 10.00 | 6,000,000 quota credits |
 
-## Production Switch Plan
+The bridge is the only authority for amount, currency, plan, and quota. Browser input and webhook metadata never choose the delivered quota.
 
-Only start this section after Creem shows production payouts enabled.
-
-1. In Creem live mode, confirm or create these live products:
-   - NexaRelay Starter Credits
-   - NexaRelay Plus Credits
-   - NexaRelay Pro Credits
-2. Copy the live product IDs.
-3. Create a live API key.
-4. Create a live webhook:
-   - Name: `NexaRelay Production Webhook`
-   - URL: `https://pay.getnexarelay.com/api/payment/creem/webhook`
-   - Required event: `checkout.completed`
-5. Copy the live webhook signing secret.
-6. In Render, update these environment variables:
-
-```text
-CREEM_API_BASE_URL=https://api.creem.io
-CREEM_API_KEY=<Creem live API key>
-CREEM_WEBHOOK_SECRET=<Creem live webhook signing secret>
-CREEM_PRODUCT_STARTER=<Creem live Starter product ID>
-CREEM_PRODUCT_PLUS=<Creem live Plus product ID>
-CREEM_PRODUCT_PRO=<Creem live Pro product ID>
-```
-
-7. Keep these existing Render values unchanged:
+## Required Sandbox safety state
 
 ```text
 PUBLIC_BASE_URL=https://pay.getnexarelay.com
 ONE_API_BASE_URL=https://api.getnexarelay.com
-TOPUP_MODE=direct
-ONE_API_AUTH_HEADER=Authorization
-ONE_API_ADMIN_TOKEN=<existing NexaRelay / One API admin token>
+PAYMENT_PUBLIC_ENABLED=false
+PAYPAL_MODE=sandbox
+PAYPAL_LIVE_ENABLED=false
 ```
 
-8. Click `Save, rebuild, and deploy` in Render.
-9. Wait until Render shows `Live`.
-10. Run one real USD 1.00 Starter payment.
-11. Verify:
-   - Creem live order is successful.
-   - Creem live webhook is successful.
-   - Render logs show the webhook and quota top-up.
-   - NexaRelay user balance increases.
+All credentials and tokens must remain only in Render secret environment variables.
 
-## Public Site Trust Checklist
+## Required Sandbox webhook events
 
-Before requesting or maintaining production approval, public pages should show:
+```text
+PAYMENT.CAPTURE.COMPLETED
+PAYMENT.CAPTURE.REFUNDED
+PAYMENT.CAPTURE.REVERSED
+PAYMENT.REFUND.PENDING
+PAYMENT.REFUND.FAILED
+CUSTOMER.DISPUTE.CREATED
+CUSTOMER.DISPUTE.UPDATED
+CUSTOMER.DISPUTE.RESOLVED
+```
 
-- Public pricing for Starter, Plus, and Pro.
-- Clear top-up instructions.
-- Privacy Policy.
-- Terms of Service.
-- Support email: `support@getnexarelay.com`.
-- API Base URL: `https://api.getnexarelay.com/v1`.
+Webhook URL:
 
-## Do Not Do Yet
+```text
+https://pay.getnexarelay.com/api/payment/paypal/webhook
+```
 
-- Do not switch Render to live Creem values before production payouts are approved.
-- Do not delete test products or test webhooks.
-- Do not expose API keys, webhook secrets, or admin tokens in GitHub or public pages.
-- Do not run broad public launch traffic before a real USD 1.00 live payment test succeeds.
+## Production gates
+
+Do not enable Live or public payments until every item is complete:
+
+1. Confirm the deployed health response reports:
+   - `mode: sandbox` during testing.
+   - `reconciliationEnabled: true`.
+   - `financialEventLedgerEnabled: true`.
+   - `automaticQuotaClawbackEnabled: false`.
+   - `paypalLiveEnabled: false`.
+   - `publicPaymentsEnabled: false`.
+2. Confirm the delivery-review and financial-review queues are empty.
+3. Test a Sandbox refund event and confirm it is ledgered exactly once.
+4. Test a Sandbox dispute lifecycle and document the manual operating response.
+5. Define the operator decision for unused, partially consumed, and fully consumed quota after a refund or buyer-favour dispute.
+6. Create a separate Live webhook and subscribe to the same required events.
+7. Store Live credentials and the Live webhook ID only in Render.
+8. Keep `PAYMENT_PUBLIC_ENABLED=false` for the first controlled Live USD 1.00 payment.
+9. Enable `PAYPAL_MODE=live` only together with the independent `PAYPAL_LIVE_ENABLED=true` gate.
+10. Verify the first controlled Live payment, webhook, ledger entry, quota delivery, and reconciliation queues before considering public access.
+
+## Do not do yet
+
+- Do not enable Live PayPal mode.
+- Do not enable public payment creation.
+- Do not automatically deduct quota for refunds or disputes.
+- Do not delete Sandbox credentials, webhook configuration, ledger rows, or database backups.
+- Do not expose secrets in chat, screenshots, logs, GitHub, or public pages.

@@ -12,6 +12,10 @@ import {
 } from './oneapi.js';
 import { paymentResultPage, paypalReturnTokenMatches } from './pages.js';
 import { secretsMatch } from './security.js';
+import {
+  captureIdFromCompletedEvent,
+  describeFinancialEvent,
+} from './financial-events.js';
 
 const port = Number(process.env.PORT || 8787);
 
@@ -277,15 +281,21 @@ async function retryCreditDelivery(orderId) {
   }
 }
 
-async function markPaidAndDeliver(providerOrderId, providerEventId, eventType, payload) {
+async function markPaidAndDeliver(providerOrderId, providerEventId, eventType, payload, captureId) {
   const saved = await withTransaction(async (client) => {
     const orderResult = await client.query('SELECT * FROM orders WHERE provider_order_id = $1 FOR UPDATE', [providerOrderId]);
     const order = orderResult.rows[0];
     if (!order) return { found: false };
+    if (captureId && order.capture_id && order.capture_id !== captureId) {
+      throw new Error('PayPal capture ID conflicts with the stored order');
+    }
     const eventInsert = await client.query(`INSERT INTO payment_events (provider, provider_event_id, event_type, order_id, payload)
       VALUES ('paypal',$1,$2,$3,$4) ON CONFLICT (provider, provider_event_id) DO NOTHING RETURNING id`, [providerEventId, eventType, order.id, payload]);
     if (!eventInsert.rowCount) return { found: true, duplicate: true, order };
-    if (order.status === 'pending') await client.query(`UPDATE orders SET status = 'paid', paid_at = NOW() WHERE id = $1`, [order.id]);
+    if (order.status === 'pending') await client.query(`UPDATE orders
+      SET status = 'paid', paid_at = NOW(), capture_id = COALESCE(capture_id, $2)
+      WHERE id = $1`, [order.id, captureId || null]);
+    else if (captureId) await client.query(`UPDATE orders SET capture_id = COALESCE(capture_id, $2) WHERE id = $1`, [order.id, captureId]);
     return { found: true, order };
   });
   if (!saved.found || saved.duplicate) return saved;
@@ -308,7 +318,7 @@ async function settleCapturedOrder(localOrderId) {
   const capture = await capturePaypalOrder(order.provider_order_id);
   if (!captureMatchesOrder(capture, order)) throw new Error('PayPal capture does not match this order');
   const captureId = capture.purchase_units[0].payments.captures[0].id;
-  const settled = await markPaidAndDeliver(order.provider_order_id, `capture:${captureId}`, 'PAYMENT.CAPTURE.COMPLETED', capture);
+  const settled = await markPaidAndDeliver(order.provider_order_id, `capture:${captureId}`, 'PAYMENT.CAPTURE.COMPLETED', capture, captureId);
   const currentResult = await query('SELECT * FROM orders WHERE id = $1', [localOrderId]);
   return { order: currentResult.rows[0] || order, capture, settled };
 }
@@ -397,10 +407,92 @@ async function paypalCancel(res, url, localOrderId) {
   }));
 }
 
+function financialReviewMessage(event, descriptor, issue) {
+  return [event.event_type, descriptor.status, issue, descriptor.reason]
+    .filter(Boolean)
+    .join(':')
+    .replace(/[\r\n\t]+/g, ' ')
+    .slice(0, 500);
+}
+
+async function recordFinancialAdjustment(event, descriptor) {
+  return withTransaction(async (client) => {
+    const orderByProviderResult = descriptor.providerOrderId
+      ? await client.query('SELECT * FROM orders WHERE provider_order_id = $1 FOR UPDATE', [descriptor.providerOrderId])
+      : { rows: [] };
+    const orderByCaptureResult = descriptor.captureId
+      ? await client.query('SELECT * FROM orders WHERE capture_id = $1 FOR UPDATE', [descriptor.captureId])
+      : { rows: [] };
+    const orderByProvider = orderByProviderResult.rows[0] || null;
+    const orderByCapture = orderByCaptureResult.rows[0] || null;
+    const mappingConflict = orderByProvider && orderByCapture && orderByProvider.id !== orderByCapture.id;
+    const order = mappingConflict ? null : (orderByProvider || orderByCapture);
+
+    const eventInsert = await client.query(`INSERT INTO payment_events
+      (provider, provider_event_id, event_type, order_id, payload)
+      VALUES ('paypal',$1,$2,$3,$4)
+      ON CONFLICT (provider, provider_event_id) DO NOTHING RETURNING id`, [
+      event.id, event.event_type, order?.id || null, event,
+    ]);
+    if (!eventInsert.rowCount) return { duplicate: true, matched: Boolean(order), orderId: order?.id || null };
+
+    let issue = mappingConflict ? 'order_mapping_conflict' : (!order ? 'order_not_found' : null);
+    if (order && descriptor.currency && descriptor.currency !== order.currency) issue = 'currency_mismatch';
+    const adjustmentStatus = issue || descriptor.status;
+    const reviewReason = financialReviewMessage(event, descriptor, issue);
+
+    await client.query(`INSERT INTO payment_adjustments
+      (id, provider, adjustment_type, provider_adjustment_id, order_id, capture_id,
+       amount_cents, currency, status, reason, last_event_type, payload)
+      VALUES ($1,'paypal',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      ON CONFLICT (provider, adjustment_type, provider_adjustment_id) DO UPDATE SET
+        order_id = COALESCE(payment_adjustments.order_id, EXCLUDED.order_id),
+        capture_id = COALESCE(EXCLUDED.capture_id, payment_adjustments.capture_id),
+        amount_cents = COALESCE(EXCLUDED.amount_cents, payment_adjustments.amount_cents),
+        currency = COALESCE(EXCLUDED.currency, payment_adjustments.currency),
+        status = EXCLUDED.status,
+        reason = EXCLUDED.reason,
+        last_event_type = EXCLUDED.last_event_type,
+        payload = EXCLUDED.payload`, [
+      crypto.randomUUID(), descriptor.adjustmentType, descriptor.providerAdjustmentId,
+      order?.id || null, descriptor.captureId, descriptor.amountCents, descriptor.currency,
+      adjustmentStatus, reviewReason, event.event_type, event,
+    ]);
+
+    if (!order) return { duplicate: false, matched: false, orderId: null, status: adjustmentStatus };
+
+    let financialStatus = issue || descriptor.financialStatus;
+    if (!issue && descriptor.adjustmentType === 'refund') {
+      const refunded = await client.query(`SELECT COALESCE(SUM(amount_cents), 0)::BIGINT AS total
+        FROM payment_adjustments
+        WHERE order_id = $1 AND adjustment_type = 'refund' AND status = 'refunded'`, [order.id]);
+      const refundedCents = Number(refunded.rows[0].total);
+      if (refundedCents >= Number(order.amount_cents)) financialStatus = 'refunded';
+      else if (refundedCents > 0) financialStatus = 'partially_refunded';
+    }
+
+    await client.query(`UPDATE orders
+      SET financial_status = $2, financial_review_required = TRUE, financial_review_reason = $3
+      WHERE id = $1`, [order.id, financialStatus, reviewReason]);
+    return { duplicate: false, matched: true, orderId: order.id, status: financialStatus };
+  });
+}
+
 async function handlePaypalWebhook(req, res) {
   const event = await readJson(req);
   if (!await verifyPaypalWebhook(req.headers, event)) return json(res, 401, { success: false, message: 'invalid PayPal webhook signature' });
   if (!event.id || !event.event_type) return json(res, 400, { success: false, message: 'missing PayPal event id or type' });
+  const financialEvent = describeFinancialEvent(event);
+  if (financialEvent) {
+    if (!financialEvent.providerAdjustmentId) return json(res, 400, { success: false, message: 'missing PayPal adjustment id' });
+    const recorded = await recordFinancialAdjustment(event, financialEvent);
+    return json(res, 200, {
+      success: true,
+      duplicate: Boolean(recorded.duplicate),
+      matched: Boolean(recorded.matched),
+      financialReviewRequired: true,
+    });
+  }
   if (event.event_type !== 'PAYMENT.CAPTURE.COMPLETED') return json(res, 200, { success: true, ignored: true });
   const providerOrderId = paypalOrderIdFromEvent(event);
   if (!providerOrderId) return json(res, 400, { success: false, message: 'missing PayPal order id' });
@@ -410,7 +502,13 @@ async function handlePaypalWebhook(req, res) {
   if (event.resource?.amount?.currency_code !== order.currency || centsFromAmount(event.resource?.amount) !== Number(order.amount_cents)) {
     return json(res, 409, { success: false, message: 'PayPal webhook amount does not match this order' });
   }
-  const settled = await markPaidAndDeliver(providerOrderId, event.id, event.event_type, event);
+  const settled = await markPaidAndDeliver(
+    providerOrderId,
+    event.id,
+    event.event_type,
+    event,
+    captureIdFromCompletedEvent(event),
+  );
   return json(res, 200, { success: true, duplicate: Boolean(settled.duplicate), delivery: settled.delivery?.action || null });
 }
 
@@ -440,6 +538,43 @@ async function reviewRequiredOrders(req, res, url) {
     ORDER BY COALESCE(d.updated_at, o.updated_at) ASC
     LIMIT $1`, [limit]);
   return json(res, 200, { success: true, data: result.rows });
+}
+
+async function financialReviewOrders(req, res, url) {
+  if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
+  const requestedLimit = Number(url.searchParams.get('limit') || 50);
+  const limit = Number.isSafeInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+  const orders = await query(`SELECT
+      o.id, o.provider_order_id, o.capture_id, o.user_id, o.username, o.plan_key,
+      o.amount_cents, o.currency, o.credits, o.status, o.financial_status,
+      o.financial_review_reason, o.created_at, o.paid_at, o.credited_at, o.updated_at,
+      (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'adjustmentType', a.adjustment_type,
+        'providerAdjustmentId', a.provider_adjustment_id,
+        'captureId', a.capture_id,
+        'amountCents', a.amount_cents,
+        'currency', a.currency,
+        'status', a.status,
+        'reason', a.reason,
+        'lastEventType', a.last_event_type,
+        'updatedAt', a.updated_at
+      ) ORDER BY a.updated_at), '[]'::jsonb)
+      FROM payment_adjustments a WHERE a.order_id = o.id) AS adjustments
+    FROM orders o
+    WHERE o.financial_review_required = TRUE
+    ORDER BY o.updated_at ASC
+    LIMIT $1`, [limit]);
+  const unmatched = await query(`SELECT
+      adjustment_type, provider_adjustment_id, capture_id, amount_cents, currency,
+      status, reason, last_event_type, created_at, updated_at
+    FROM payment_adjustments
+    WHERE order_id IS NULL
+    ORDER BY updated_at ASC
+    LIMIT $1`, [limit]);
+  return json(res, 200, {
+    success: true,
+    data: { orders: orders.rows, unmatchedAdjustments: unmatched.rows },
+  });
 }
 
 async function retryReviewedOrder(req, res, orderId) {
@@ -472,6 +607,8 @@ async function route(req, res) {
         mode: settings.paypalMode,
         creditDeliveryMode: 'one_api_redemption',
         reconciliationEnabled: true,
+        financialEventLedgerEnabled: true,
+        automaticQuotaClawbackEnabled: false,
         paypalLiveEnabled: settings.paypalLiveEnabled,
         publicPaymentsEnabled: settings.publicPaymentsEnabled,
       });
@@ -483,6 +620,7 @@ async function route(req, res) {
     if (req.method === 'POST' && /^\/api\/payment\/paypal\/orders\/[^/]+\/capture$/.test(url.pathname)) return captureOrder(req, res, url.pathname.split('/')[5]);
     if (req.method === 'POST' && url.pathname === '/api/payment/paypal/webhook') return handlePaypalWebhook(req, res);
     if (req.method === 'GET' && url.pathname === '/api/payment/admin/review-required') return reviewRequiredOrders(req, res, url);
+    if (req.method === 'GET' && url.pathname === '/api/payment/admin/financial-review') return financialReviewOrders(req, res, url);
     if (req.method === 'POST' && /^\/api\/payment\/admin\/orders\/[^/]+\/retry-credit$/.test(url.pathname)) {
       return retryReviewedOrder(req, res, url.pathname.split('/')[5]);
     }
