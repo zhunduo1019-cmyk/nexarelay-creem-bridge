@@ -33,6 +33,12 @@ This file records the current PayPal safety state and the remaining production g
 - The cancelled-buyer dispute was closed with `no_action_no_financial_loss`; repeating the same authenticated resolution returned a duplicate success without changing the audit record.
 - The fully refunded USD 1.00 order recovered exactly 500,000 Sandbox credits after a guarded balance check (`2,510,000 -> 2,010,000`) and was closed with `quota_removed_full`.
 - After both decisions, the financial-review, unmatched-adjustment, and credit-delivery review queues all contained zero items.
+- A first controlled Live USD 1.00 order reached PayPal guest checkout, where
+  PayPal rejected a Mainland China billing address because the seller is also
+  registered in Mainland China. The buyer returned through the cancel route;
+  no authorization or capture occurred, no quota was delivered, and the order
+  was closed as `cancelled` with null capture, paid, and credited fields. The
+  user's quota remained `2,010,000`, and the bridge was returned to Sandbox.
 
 ## Server-side pricing
 
@@ -102,9 +108,15 @@ Do not enable Live or public payments until every item is complete:
    in Render's dedicated `PAYPAL_LIVE_*` variables. The resulting deployment
    remained `PAYPAL_MODE=sandbox`, `PAYPAL_LIVE_ENABLED=false`, and
    `PAYMENT_PUBLIC_ENABLED=false`.
-8. Keep `PAYMENT_PUBLIC_ENABLED=false` for the first controlled Live USD 1.00 payment.
-9. Enable `PAYPAL_MODE=live` only together with the independent `PAYPAL_LIVE_ENABLED=true` gate.
-10. Verify the first controlled Live payment, webhook, ledger entry, quota delivery, and reconciliation queues before considering public access.
+8. Completed for the blocked 2026-08-11 attempt: `PAYMENT_PUBLIC_ENABLED`
+   remained `false` throughout the controlled Live window.
+9. Completed for the blocked 2026-08-11 attempt: `PAYPAL_MODE=live` was enabled
+   only together with `PAYPAL_LIVE_ENABLED=true`; both were returned to the
+   Sandbox/false state after the attempt.
+10. Pending: repeat the controlled Live payment with a legitimate non-Mainland
+    China buyer account or card and its real billing address, then verify the
+    capture, Live webhook, ledger entry, quota delivery, and reconciliation
+    queues before considering public access.
 
 ## Do not do yet
 

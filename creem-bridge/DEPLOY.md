@@ -75,4 +75,17 @@ stored only in Render's dedicated `PAYPAL_LIVE_*` variables. After the Render
 deployment, `/health` still reported Sandbox mode, Live disabled, public
 payments disabled, and automatic quota clawback disabled.
 
+## Blocked first Live payment attempt
+
+On 2026-08-11, the bridge entered a controlled Live window with public payments
+still disabled and created one internal USD 1.00 Starter order. PayPal guest
+checkout rejected the buyer's Mainland China billing address because the seller
+is also registered in Mainland China. No payment authorization or capture took
+place. The order was closed as `cancelled` only after verifying null capture,
+paid, and credited fields; the One API quota remained `2,010,000`. The bridge
+was immediately returned to `PAYPAL_MODE=sandbox` with
+`PAYPAL_LIVE_ENABLED=false` and `PAYMENT_PUBLIC_ENABLED=false`. A successful
+Live drill therefore still requires a legitimate non-Mainland China buyer and
+real matching billing details.
+
 Do not change `PAYMENT_PUBLIC_ENABLED` to `true`, switch to `PAYPAL_MODE=live`, set `PAYPAL_LIVE_ENABLED=true`, or expose a public checkout UI during this phase.
