@@ -308,6 +308,7 @@ async function route(req, res) {
         ok: true,
         provider: 'paypal',
         mode: settings.paypalMode,
+        creditDeliveryMode: 'one_api_redemption',
         paypalLiveEnabled: settings.paypalLiveEnabled,
         publicPaymentsEnabled: settings.publicPaymentsEnabled,
       });
