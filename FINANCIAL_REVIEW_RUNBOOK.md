@@ -50,3 +50,8 @@ content-type: application/json
 
 This records an audit trail and removes the order from the open financial-review queue. It does not modify One API quota or account status.
 
+## Current One API compatibility
+
+The deployed NexaRelay One API is `v0.6.4`. That version does not provide the newer administrator `POST /api/topup` route. Prefer the administrator UI for quota changes. If an API operation is required, `PUT /api/user/` must use a freshly read complete user record, an exact precondition on the current quota, and a post-update read-back. Never repeat an uncertain update; inspect the current quota first.
+
+On 2026-08-11, the Sandbox full-refund drill used those guards to change quota from 2,510,000 to 2,010,000. The bridge then recorded `quota_removed_full`. The buyer-cancelled dispute recorded `no_action_no_financial_loss`. All review queues were empty afterward.

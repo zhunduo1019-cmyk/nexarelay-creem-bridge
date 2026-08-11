@@ -30,6 +30,9 @@ This file records the current PayPal safety state and the remaining production g
 - PayPal delivered `CUSTOMER.DISPUTE.CREATED`, three lifecycle `CUSTOMER.DISPUTE.UPDATED` events, and `CUSTOMER.DISPUTE.RESOLVED`.
 - All five dispute events remained associated with one dispute adjustment; the final adjustment status is `resolved`, the order is `financial_status=dispute_resolved`, and the unmatched-adjustment count is zero.
 - The credited order and delivered quota were preserved while `financial_review_required=true` remained set for an operator decision.
+- The cancelled-buyer dispute was closed with `no_action_no_financial_loss`; repeating the same authenticated resolution returned a duplicate success without changing the audit record.
+- The fully refunded USD 1.00 order recovered exactly 500,000 Sandbox credits after a guarded balance check (`2,510,000 -> 2,010,000`) and was closed with `quota_removed_full`.
+- After both decisions, the financial-review, unmatched-adjustment, and credit-delivery review queues all contained zero items.
 
 ## Server-side pricing
 

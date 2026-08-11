@@ -52,4 +52,8 @@ On 2026-08-11, a USD 1.00 full refund completed in PayPal Sandbox. The `PAYMENT.
 
 On 2026-08-11, a Sandbox buyer opened a USD 1.00 digital-goods dispute and later cancelled it. PayPal delivered `CUSTOMER.DISPUTE.CREATED`, three `CUSTOMER.DISPUTE.UPDATED` events, and `CUSTOMER.DISPUTE.RESOLVED`. The five events were stored against one dispute adjustment, which ended with `status=resolved` and `last_event_type=CUSTOMER.DISPUTE.RESOLVED`. The order remained `credited`, entered `financial_status=dispute_resolved`, retained `financial_review_required=true`, and had zero unmatched adjustments. No quota was deducted automatically.
 
+## Verified Sandbox financial-review drill
+
+On 2026-08-11, migration `005_financial_review_resolutions.sql` deployed successfully. The buyer-cancelled dispute was resolved as `no_action_no_financial_loss`, and an identical retry returned `duplicate=true`. The fully refunded USD 1.00 order passed an exact balance precondition, recovered 500,000 credits (`2,510,000 -> 2,010,000`), passed a read-back check, and was resolved as `quota_removed_full`. The financial-review queue, unmatched-adjustment queue, and credit-delivery review queue all ended at zero. Automatic quota clawback remained disabled throughout.
+
 Do not change `PAYMENT_PUBLIC_ENABLED` to `true`, switch to `PAYPAL_MODE=live`, set `PAYPAL_LIVE_ENABLED=true`, or expose a public checkout UI during this phase.
