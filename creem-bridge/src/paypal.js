@@ -85,6 +85,14 @@ export async function capturePaypalOrder(providerOrderId) {
   });
 }
 
+export async function refundPaypalCapture(captureId, orderId) {
+  return apiRequest(`/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, {
+    method: 'POST',
+    requestId: `sandbox-refund:${orderId}`,
+    prefer: 'return=representation',
+  });
+}
+
 export async function verifyPaypalWebhook(headers, event) {
   const webhookId = requireConfig(config().paypalWebhookId, 'PAYPAL_WEBHOOK_ID');
   const verification = await apiRequest('/v1/notifications/verify-webhook-signature', {
