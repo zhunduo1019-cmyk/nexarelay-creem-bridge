@@ -9,7 +9,7 @@ This service is a deliberately closed-by-default payment bridge for NexaRelay.
 - Approval returns to a token-bound bridge route that performs an idempotent capture; cancellation never captures.
 - PostgreSQL stores orders, webhook events, and credit deliveries.
 - Credit delivery uses a single-use One API redemption code. One API consumes the code and increments quota atomically in its own transaction, avoiding read-modify-write quota races.
-- A delivery that may have reached One API but lacks a final acknowledgement is sent to `review_required`; it is never blindly retried. The prepared redemption reference remains in the payment ledger for reconciliation.
+- A delivery that may have reached One API but lacks a final acknowledgement is sent to `review_required`; it is never blindly retried. An authenticated reconciliation retry first inspects the original single-use redemption: an unused code is redeemed once, while an already-used code only repairs the local ledger.
 
 ## Plans
 
@@ -41,11 +41,15 @@ POST  /api/payment/paypal/webhook
 GET   /api/payment/paypal/return/:orderId
 GET   /api/payment/paypal/cancel/:orderId
 GET   /api/payment/orders/:orderId
+GET   /api/payment/admin/review-required
+POST  /api/payment/admin/orders/:orderId/retry-credit
 ```
 
 `POST /api/payment/paypal/orders` requires `plan`, `userId`, and `username`. It rejects browser-supplied prices or credits because those fields are not part of the request contract.
 
 PayPal redirects approved buyers to the return route. The route verifies PayPal's `token` against the stored provider order ID, captures the approved order with an idempotency key, delivers credits once, and renders a user-facing result page. The cancel route never captures an order.
+
+Both admin reconciliation routes always require the exact `x-bridge-secret`, even if public payments are enabled. The list route never returns the stored redemption key. Retry only accepts paid orders in a reviewable state and records attempt count, timestamp, and the latest sanitized error in PostgreSQL.
 
 ## Secrets
 

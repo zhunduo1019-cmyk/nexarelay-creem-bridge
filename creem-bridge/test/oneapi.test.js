@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createQuotaRedemption, redeemQuota, redemptionNameForOrder } from '../src/oneapi.js';
+import {
+  createQuotaRedemption,
+  findQuotaRedemption,
+  redeemQuota,
+  redemptionNameForOrder,
+  redemptionStatuses,
+} from '../src/oneapi.js';
 
 function response(body, status = 200) {
   return {
@@ -73,5 +79,42 @@ test('quota delivery redeems with the matched user token and verifies the amount
     assert.deepEqual(JSON.parse(calls[1].options.body), { key: 'redemption-secret' });
     assert.equal(JSON.stringify(result).includes('user-secret'), false);
     assert.equal(JSON.stringify(result).includes('redemption-secret'), false);
+  });
+});
+
+test('reconciliation finds the exact deterministic redemption without exposing unrelated codes', async () => {
+  const orderId = 'order-2';
+  const name = redemptionNameForOrder(orderId);
+  await withMockedOneApi([
+    response({ success: true, data: [
+      { id: 10, name: `${name}-other`, key: 'wrong-name', quota: 500000, status: redemptionStatuses.enabled },
+      { id: 11, name, key: 'wrong-quota', quota: 1, status: redemptionStatuses.enabled },
+      { id: 12, name, key: 'expected-key', quota: 500000, status: redemptionStatuses.used },
+    ] }),
+  ], async (calls) => {
+    const found = await findQuotaRedemption({ orderId, expectedKey: 'expected-key', credits: 500000 });
+    assert.deepEqual(found, {
+      key: 'expected-key',
+      name,
+      status: redemptionStatuses.used,
+      quota: 500000,
+    });
+    assert.equal(calls[0].url, `https://one-api.example/api/redemption/search?keyword=${encodeURIComponent(name)}`);
+  });
+});
+
+test('reconciliation refuses ambiguous redemptions', async () => {
+  const orderId = 'order-3';
+  const name = redemptionNameForOrder(orderId);
+  await withMockedOneApi([
+    response({ success: true, data: [
+      { id: 20, name, key: 'key-1', quota: 500000, status: redemptionStatuses.enabled },
+      { id: 21, name, key: 'key-2', quota: 500000, status: redemptionStatuses.enabled },
+    ] }),
+  ], async () => {
+    await assert.rejects(
+      findQuotaRedemption({ orderId, credits: 500000 }),
+      /multiple matching redemptions/,
+    );
   });
 });

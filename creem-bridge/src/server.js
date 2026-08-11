@@ -1,9 +1,15 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { getPlan, config } from './config.js';
 import { query, withTransaction } from './db.js';
 import { createPaypalOrder, capturePaypalOrder, verifyPaypalWebhook } from './paypal.js';
-import { createQuotaRedemption, redeemQuota } from './oneapi.js';
+import {
+  createQuotaRedemption,
+  findQuotaRedemption,
+  redeemQuota,
+  redemptionStatuses,
+} from './oneapi.js';
 import { paymentResultPage, paypalReturnTokenMatches } from './pages.js';
 import { secretsMatch } from './security.js';
 
@@ -43,7 +49,11 @@ async function readJson(req) {
 function paymentAccessAllowed(req) {
   const settings = config();
   if (settings.publicPaymentsEnabled) return true;
-  return secretsMatch(req.headers['x-bridge-secret'], settings.bridgeCheckoutSecret);
+  return bridgeSecretAllowed(req);
+}
+
+function bridgeSecretAllowed(req) {
+  return secretsMatch(req.headers['x-bridge-secret'], config().bridgeCheckoutSecret);
 }
 
 function parseOwner(input) {
@@ -71,6 +81,10 @@ function paypalOrderIdFromEvent(event) {
 
 function centsFromAmount(amount) {
   return Math.round(Number(amount?.value || 0) * 100);
+}
+
+function safeErrorMessage(error) {
+  return String(error?.message || 'credit delivery failed').replace(/[\r\n\t]+/g, ' ').slice(0, 500);
 }
 
 async function createOrder(req, res) {
@@ -111,9 +125,43 @@ async function claimCreditDelivery(orderId) {
       await client.query(`UPDATE orders SET status = 'review_required' WHERE id = $1`, [order.id]);
       return { action: 'review_required', order };
     }
-    await client.query(`UPDATE credit_deliveries SET status = 'delivering' WHERE id = $1`, [delivery.id]);
+    await client.query(`UPDATE credit_deliveries
+      SET status = 'delivering', attempt_count = attempt_count + 1, last_attempt_at = NOW(), last_error = NULL
+      WHERE id = $1`, [delivery.id]);
     await client.query(`UPDATE orders SET status = 'credit_pending' WHERE id = $1`, [order.id]);
     return { action: 'deliver', order };
+  });
+}
+
+async function savePreparedRedemption(orderId, prepared) {
+  await query(`UPDATE credit_deliveries SET one_api_result = $1 WHERE order_id = $2`, [{
+    mode: 'redemption_prepared',
+    redemptionName: prepared.name,
+    redemptionKey: prepared.key,
+    userId: prepared.userId,
+    username: prepared.username,
+    credits: prepared.credits,
+  }, orderId]);
+}
+
+async function completeCreditDelivery(orderId, result) {
+  await withTransaction(async (client) => {
+    await client.query(`UPDATE credit_deliveries
+      SET status = 'credited', one_api_result = $1, delivered_at = COALESCE(delivered_at, NOW()), last_error = NULL
+      WHERE order_id = $2`, [result, orderId]);
+    await client.query(`UPDATE orders
+      SET status = 'credited', credited_at = COALESCE(credited_at, NOW())
+      WHERE id = $1`, [orderId]);
+  });
+}
+
+async function markCreditReviewRequired(orderId, error) {
+  const message = safeErrorMessage(error);
+  await withTransaction(async (client) => {
+    await client.query(`UPDATE credit_deliveries
+      SET status = 'review_required', last_error = $1
+      WHERE order_id = $2`, [message, orderId]);
+    await client.query(`UPDATE orders SET status = 'review_required' WHERE id = $1`, [orderId]);
   });
 }
 
@@ -127,14 +175,7 @@ async function deliverCredits(orderId) {
       username: claim.order.username,
       credits: claim.order.credits,
     });
-    await query(`UPDATE credit_deliveries SET one_api_result = $1 WHERE order_id = $2`, [{
-      mode: 'redemption_prepared',
-      redemptionName: prepared.name,
-      redemptionKey: prepared.key,
-      userId: prepared.userId,
-      username: prepared.username,
-      credits: prepared.credits,
-    }, orderId]);
+    await savePreparedRedemption(orderId, prepared);
     const result = await redeemQuota({
       key: prepared.key,
       name: prepared.name,
@@ -142,16 +183,96 @@ async function deliverCredits(orderId) {
       username: claim.order.username,
       credits: claim.order.credits,
     });
-    await withTransaction(async (client) => {
-      await client.query(`UPDATE credit_deliveries SET status = 'credited', one_api_result = $1, delivered_at = NOW() WHERE order_id = $2`, [result, orderId]);
-      await client.query(`UPDATE orders SET status = 'credited', credited_at = NOW() WHERE id = $1`, [orderId]);
-    });
+    await completeCreditDelivery(orderId, result);
     return { action: 'credited', result };
   } catch (error) {
-    await withTransaction(async (client) => {
-      await client.query(`UPDATE credit_deliveries SET status = 'review_required' WHERE order_id = $1`, [orderId]);
-      await client.query(`UPDATE orders SET status = 'review_required' WHERE id = $1`, [orderId]);
+    await markCreditReviewRequired(orderId, error);
+    throw error;
+  }
+}
+
+async function claimReviewDelivery(orderId) {
+  return withTransaction(async (client) => {
+    const orderResult = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [orderId]);
+    const order = orderResult.rows[0];
+    if (!order) return { action: 'missing' };
+    if (order.status === 'credited') return { action: 'credited', order };
+    if (!order.paid_at) return { action: 'not_paid', order };
+    if (!['review_required', 'credit_pending'].includes(order.status)) return { action: 'not_reviewable', order };
+
+    const deliveryResult = await client.query('SELECT * FROM credit_deliveries WHERE order_id = $1 FOR UPDATE', [order.id]);
+    const delivery = deliveryResult.rows[0];
+    if (!delivery) return { action: 'missing_delivery', order };
+    if (delivery.status === 'credited') return { action: 'credited', order };
+    if (delivery.status === 'delivering' && Date.now() - new Date(delivery.updated_at).getTime() < 5 * 60_000) {
+      return { action: 'in_progress', order, delivery };
+    }
+    if (!['review_required', 'delivering'].includes(delivery.status)) return { action: 'not_reviewable', order, delivery };
+
+    await client.query(`UPDATE credit_deliveries
+      SET status = 'delivering', attempt_count = attempt_count + 1, last_attempt_at = NOW(), last_error = NULL
+      WHERE id = $1`, [delivery.id]);
+    await client.query(`UPDATE orders SET status = 'credit_pending' WHERE id = $1`, [order.id]);
+    return { action: 'retry', order, delivery };
+  });
+}
+
+async function retryCreditDelivery(orderId) {
+  const claim = await claimReviewDelivery(orderId);
+  if (claim.action !== 'retry') return claim;
+
+  try {
+    const stored = claim.delivery.one_api_result;
+    const expectedKey = stored?.mode === 'redemption_prepared' ? stored.redemptionKey : null;
+    let redemption = await findQuotaRedemption({
+      orderId,
+      expectedKey,
+      credits: claim.order.credits,
     });
+
+    if (!redemption) {
+      if (expectedKey) throw new Error('The prepared One API redemption could not be found');
+      const prepared = await createQuotaRedemption({
+        orderId,
+        userId: claim.order.user_id,
+        username: claim.order.username,
+        credits: claim.order.credits,
+      });
+      await savePreparedRedemption(orderId, prepared);
+      redemption = { ...prepared, status: redemptionStatuses.enabled, quota: prepared.credits };
+    } else if (!expectedKey) {
+      await savePreparedRedemption(orderId, {
+        ...redemption,
+        userId: claim.order.user_id,
+        username: claim.order.username,
+        credits: claim.order.credits,
+      });
+    }
+
+    if (redemption.status === redemptionStatuses.used) {
+      const reconciled = {
+        mode: 'redemption_reconciled',
+        redemptionName: redemption.name,
+        userId: claim.order.user_id,
+        username: claim.order.username,
+        addedQuota: Number(claim.order.credits),
+      };
+      await completeCreditDelivery(orderId, reconciled);
+      return { action: 'credited', result: reconciled };
+    }
+    if (redemption.status !== redemptionStatuses.enabled) throw new Error('One API redemption is not enabled');
+
+    const result = await redeemQuota({
+      key: redemption.key,
+      name: redemption.name,
+      userId: claim.order.user_id,
+      username: claim.order.username,
+      credits: claim.order.credits,
+    });
+    await completeCreditDelivery(orderId, result);
+    return { action: 'credited', result };
+  } catch (error) {
+    await markCreditReviewRequired(orderId, error);
     throw error;
   }
 }
@@ -299,6 +420,47 @@ async function orderStatus(res, orderId) {
   return json(res, 200, { success: true, data: result.rows[0] });
 }
 
+function validOrderId(orderId) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(orderId);
+}
+
+async function reviewRequiredOrders(req, res, url) {
+  if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
+  const requestedLimit = Number(url.searchParams.get('limit') || 50);
+  const limit = Number.isSafeInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+  const result = await query(`SELECT
+      o.id, o.provider_order_id, o.user_id, o.username, o.plan_key, o.amount_cents, o.currency,
+      o.credits, o.status, o.created_at, o.paid_at, o.credited_at,
+      d.status AS delivery_status, d.attempt_count, d.last_attempt_at, d.last_error,
+      d.created_at AS delivery_created_at, d.updated_at AS delivery_updated_at
+    FROM orders o
+    LEFT JOIN credit_deliveries d ON d.order_id = o.id
+    WHERE o.status = 'review_required'
+       OR (o.status = 'credit_pending' AND d.status = 'delivering' AND d.updated_at < NOW() - INTERVAL '5 minutes')
+    ORDER BY COALESCE(d.updated_at, o.updated_at) ASC
+    LIMIT $1`, [limit]);
+  return json(res, 200, { success: true, data: result.rows });
+}
+
+async function retryReviewedOrder(req, res, orderId) {
+  if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
+  if (!validOrderId(orderId)) return json(res, 400, { success: false, message: 'invalid order id' });
+  try {
+    const result = await retryCreditDelivery(orderId);
+    if (result.action === 'missing') return json(res, 404, { success: false, message: 'order not found' });
+    if (result.action === 'credited') return json(res, 200, { success: true, data: { orderId, status: 'credited' } });
+    if (result.action === 'in_progress') return json(res, 409, { success: false, message: 'credit delivery is already in progress' });
+    return json(res, 409, { success: false, message: 'order is not eligible for credit retry', reason: result.action });
+  } catch (error) {
+    console.error('Credit reconciliation failed:', safeErrorMessage(error));
+    return json(res, 202, {
+      success: false,
+      message: 'credit delivery still requires review',
+      data: { orderId, status: 'review_required' },
+    });
+  }
+}
+
 async function route(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
@@ -309,6 +471,7 @@ async function route(req, res) {
         provider: 'paypal',
         mode: settings.paypalMode,
         creditDeliveryMode: 'one_api_redemption',
+        reconciliationEnabled: true,
         paypalLiveEnabled: settings.paypalLiveEnabled,
         publicPaymentsEnabled: settings.publicPaymentsEnabled,
       });
@@ -319,6 +482,10 @@ async function route(req, res) {
     if (req.method === 'POST' && url.pathname === '/api/payment/paypal/orders') return createOrder(req, res);
     if (req.method === 'POST' && /^\/api\/payment\/paypal\/orders\/[^/]+\/capture$/.test(url.pathname)) return captureOrder(req, res, url.pathname.split('/')[5]);
     if (req.method === 'POST' && url.pathname === '/api/payment/paypal/webhook') return handlePaypalWebhook(req, res);
+    if (req.method === 'GET' && url.pathname === '/api/payment/admin/review-required') return reviewRequiredOrders(req, res, url);
+    if (req.method === 'POST' && /^\/api\/payment\/admin\/orders\/[^/]+\/retry-credit$/.test(url.pathname)) {
+      return retryReviewedOrder(req, res, url.pathname.split('/')[5]);
+    }
     if (req.method === 'GET' && /^\/api\/payment\/paypal\/return\/[^/]+$/.test(url.pathname)) return paypalReturn(res, url, url.pathname.split('/').pop());
     if (req.method === 'GET' && /^\/api\/payment\/paypal\/cancel\/[^/]+$/.test(url.pathname)) return paypalCancel(res, url, url.pathname.split('/').pop());
     if (req.method === 'GET' && /^\/api\/payment\/orders\/[^/]+$/.test(url.pathname)) return orderStatus(res, url.pathname.split('/').pop());
@@ -329,4 +496,10 @@ async function route(req, res) {
   }
 }
 
-http.createServer(route).listen(port, () => console.log(`NexaRelay PayPal bridge listening on :${port}`));
+export function createServer() {
+  return http.createServer(route);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  createServer().listen(port, () => console.log(`NexaRelay PayPal bridge listening on :${port}`));
+}

@@ -39,6 +39,12 @@ export function redemptionNameForOrder(orderId) {
   return `nr-${crypto.createHash('sha256').update(orderId).digest('hex').slice(0, 17)}`;
 }
 
+export const redemptionStatuses = Object.freeze({
+  enabled: 1,
+  disabled: 2,
+  used: 3,
+});
+
 function validateCredits(credits) {
   const value = Number(credits);
   if (!Number.isSafeInteger(value) || value < 1) throw new Error('A valid credit amount is required');
@@ -65,6 +71,28 @@ export async function createQuotaRedemption({ orderId, userId, username, credits
     username: user.username,
     previousQuota: Number(user.quota || 0),
     credits: amount,
+  };
+}
+
+export async function findQuotaRedemption({ orderId, expectedKey, credits }) {
+  const amount = validateCredits(credits);
+  const name = redemptionNameForOrder(orderId);
+  const result = await request(`/api/redemption/search?keyword=${encodeURIComponent(name)}`);
+  const redemptions = Array.isArray(result.data) ? result.data : [];
+  const matches = redemptions.filter((item) => item?.name === name
+    && Number(item.quota) === amount
+    && (!expectedKey || item.key === expectedKey));
+
+  if (matches.length > 1) throw new Error('One API returned multiple matching redemptions');
+  if (!matches.length) return null;
+
+  const match = matches[0];
+  if (typeof match.key !== 'string' || !match.key) throw new Error('One API redemption key is missing');
+  return {
+    key: match.key,
+    name,
+    status: Number(match.status),
+    quota: Number(match.quota),
   };
 }
 

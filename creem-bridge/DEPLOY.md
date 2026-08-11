@@ -22,4 +22,6 @@ BRIDGE_CHECKOUT_SECRET=<long random value>
 
 Use `node src/migrate.js && node src/server.js` as the start command. Configure the PayPal sandbox webhook only after the bridge is live and `/health` returns `ok: true`.
 
+After each deployment, verify that `/health` reports `reconciliationEnabled: true`. Review items through `GET /api/payment/admin/review-required` and retry a single paid item through `POST /api/payment/admin/orders/:orderId/retry-credit`, passing `x-bridge-secret` only from an administrator-controlled client.
+
 Do not change `PAYMENT_PUBLIC_ENABLED` to `true`, switch to `PAYPAL_MODE=live`, set `PAYPAL_LIVE_ENABLED=true`, or expose a public checkout UI during this phase.
