@@ -7,7 +7,7 @@ This file records the current PayPal safety state and the remaining production g
 - PayPal Complete Payments access is approved.
 - PayPal remains in Sandbox mode.
 - Public registration and public payment creation remain disabled.
-- Live credentials are not used.
+- Live credentials are staged in dedicated Render variables but are not used while `PAYPAL_MODE=sandbox` and `PAYPAL_LIVE_ENABLED=false`.
 - PostgreSQL stores orders, PayPal webhook events, credit deliveries, and financial adjustments.
 - Credit delivery uses a single-use One API redemption and authenticated reconciliation.
 - Refund, reversal, and dispute events are ledgered idempotently and require manual review.
@@ -96,10 +96,12 @@ Do not enable Live or public payments until every item is complete:
 3. Completed 2026-08-11: the verified Sandbox refund Webhook was resent and the existing adjustment was not duplicated.
 4. Completed 2026-08-11: a Sandbox dispute completed the `CREATED` -> `UPDATED` -> `RESOLVED` lifecycle, stayed linked to one adjustment, and preserved the credited order for manual review.
 5. Completed 2026-08-11: `FINANCIAL_REVIEW_RUNBOOK.md` defines the no-loss, fully recoverable, partially consumed, and fully consumed quota decisions. The bridge records authenticated resolutions but never changes One API quota automatically.
-6. Create a separate Live webhook and subscribe to the same required events.
-7. Store Live credentials and the Live webhook ID only in Render's dedicated
-   `PAYPAL_LIVE_*` variables while `PAYPAL_MODE=sandbox` and
-   `PAYPAL_LIVE_ENABLED=false` remain unchanged.
+6. Completed 2026-08-11: created a separate Live webhook at the bridge webhook
+   URL and subscribed it to the same eight required payment and dispute events.
+7. Completed 2026-08-11: stored the Live Client ID, Secret, and Webhook ID only
+   in Render's dedicated `PAYPAL_LIVE_*` variables. The resulting deployment
+   remained `PAYPAL_MODE=sandbox`, `PAYPAL_LIVE_ENABLED=false`, and
+   `PAYMENT_PUBLIC_ENABLED=false`.
 8. Keep `PAYMENT_PUBLIC_ENABLED=false` for the first controlled Live USD 1.00 payment.
 9. Enable `PAYPAL_MODE=live` only together with the independent `PAYPAL_LIVE_ENABLED=true` gate.
 10. Verify the first controlled Live payment, webhook, ledger entry, quota delivery, and reconciliation queues before considering public access.

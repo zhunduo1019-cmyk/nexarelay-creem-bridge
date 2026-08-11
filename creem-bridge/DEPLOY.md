@@ -64,4 +64,15 @@ On 2026-08-11, a Sandbox buyer opened a USD 1.00 digital-goods dispute and later
 
 On 2026-08-11, migration `005_financial_review_resolutions.sql` deployed successfully. The buyer-cancelled dispute was resolved as `no_action_no_financial_loss`, and an identical retry returned `duplicate=true`. The fully refunded USD 1.00 order passed an exact balance precondition, recovered 500,000 credits (`2,510,000 -> 2,010,000`), passed a read-back check, and was resolved as `quota_removed_full`. The financial-review queue, unmatched-adjustment queue, and credit-delivery review queue all ended at zero. Automatic quota clawback remained disabled throughout.
 
+## Verified Live preparation
+
+On 2026-08-11, a separate Live webhook was created for the bridge URL and
+subscribed to `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.REFUNDED`,
+`PAYMENT.CAPTURE.REVERSED`, `PAYMENT.REFUND.PENDING`, `PAYMENT.REFUND.FAILED`,
+`CUSTOMER.DISPUTE.CREATED`, `CUSTOMER.DISPUTE.UPDATED`, and
+`CUSTOMER.DISPUTE.RESOLVED`. The Live Client ID, Secret, and Webhook ID were
+stored only in Render's dedicated `PAYPAL_LIVE_*` variables. After the Render
+deployment, `/health` still reported Sandbox mode, Live disabled, public
+payments disabled, and automatic quota clawback disabled.
+
 Do not change `PAYMENT_PUBLIC_ENABLED` to `true`, switch to `PAYPAL_MODE=live`, set `PAYPAL_LIVE_ENABLED=true`, or expose a public checkout UI during this phase.

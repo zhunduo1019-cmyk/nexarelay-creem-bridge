@@ -27,7 +27,7 @@ This service is a deliberately closed-by-default payment bridge for NexaRelay.
 4. Run `npm test`.
 5. Run `npm start`.
 
-For the initial test, keep `PAYMENT_PUBLIC_ENABLED=false`, `PAYPAL_MODE=sandbox`, `PAYPAL_LIVE_ENABLED=false`, and use `x-bridge-secret` from an internal test client. Do not set live credentials or enable public payments until the complete sandbox test has succeeded.
+For the initial test, keep `PAYMENT_PUBLIC_ENABLED=false`, `PAYPAL_MODE=sandbox`, `PAYPAL_LIVE_ENABLED=false`, and use `x-bridge-secret` from an internal test client. After the complete Sandbox test succeeds, Live credentials may be staged only in the dedicated `PAYPAL_LIVE_*` variables; staging them must not change any activation switch.
 
 Live mode is fail-closed: `PAYPAL_MODE=live` is rejected unless the separate `PAYPAL_LIVE_ENABLED=true` switch is also present. Sandbox and Live credentials occupy independent `PAYPAL_SANDBOX_*` and `PAYPAL_LIVE_*` variables; Live mode never falls back to the legacy generic Sandbox variables. Keep the Live switch false until the production-readiness review is complete.
 
