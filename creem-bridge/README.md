@@ -44,6 +44,7 @@ GET   /api/payment/orders/:orderId
 GET   /api/payment/admin/review-required
 POST  /api/payment/admin/orders/:orderId/retry-credit
 POST  /api/payment/admin/sandbox/orders/:orderId/arm-post-redemption-failure
+POST  /api/payment/admin/sandbox/orders/:sourceOrderId/create-reconciliation-drill
 ```
 
 `POST /api/payment/paypal/orders` requires `plan`, `userId`, and `username`. It rejects browser-supplied prices or credits because those fields are not part of the request contract.
@@ -53,6 +54,8 @@ PayPal redirects approved buyers to the return route. The route verifies PayPal'
 All admin routes always require the exact `x-bridge-secret`. The list route never returns the stored redemption key. Retry only accepts paid orders in a reviewable state and records attempt count, timestamp, and the latest sanitized error in PostgreSQL.
 
 The sandbox drill route is intentionally fail-closed: it only arms an unpaid pending order while PayPal is in sandbox mode, Live is disabled, and public payments are disabled. It injects one in-memory failure after One API has redeemed the single-use code but before the bridge records its local acknowledgement. Use it only to prove that reconciliation repairs the ledger without delivering quota twice.
+
+The drill-order route clones only the owner and server-side plan key from an already credited PayPal order, creates a new Sandbox PayPal order, and arms that new order at the same failure point. It never accepts browser-supplied owner, price, or credit values.
 
 ## Secrets
 
