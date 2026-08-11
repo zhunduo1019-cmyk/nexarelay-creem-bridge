@@ -42,4 +42,8 @@ Review them through `GET /api/payment/admin/financial-review`. `/health` must re
 
 On 2026-08-11, a controlled post-redemption acknowledgement failure was injected into a USD 1.00 Sandbox order. The order entered `review_required`; the authenticated retry reconciled the already-used single-use redemption, changed the order to `credited`, and removed it from the review queue. The user balance was USD 5.02-equivalent both immediately before and after retry, confirming that recovery did not deliver quota twice. The temporary fault-injection routes were removed after the drill.
 
+## Verified Sandbox refund drill
+
+On 2026-08-11, a USD 1.00 full refund completed in PayPal Sandbox. The `PAYMENT.CAPTURE.REFUNDED` event was stored as a USD 1.00 refund, migration `004_reconcile_refund_links.sql` associated the event through the PayPal invoice/HATEOAS capture links, the order entered `financial_status=refunded`, and the unmatched-adjustment count became zero. Automatic quota clawback remained disabled. The temporary authenticated Sandbox refund route was removed after verification.
+
 Do not change `PAYMENT_PUBLIC_ENABLED` to `true`, switch to `PAYPAL_MODE=live`, set `PAYPAL_LIVE_ENABLED=true`, or expose a public checkout UI during this phase.

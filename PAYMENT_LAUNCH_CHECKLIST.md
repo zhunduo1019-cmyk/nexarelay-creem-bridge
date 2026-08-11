@@ -20,6 +20,11 @@ This file records the current PayPal safety state and the remaining production g
 - A controlled post-redemption acknowledgement failure entered `review_required`.
 - Authenticated retry repaired the ledger without delivering quota twice.
 - The temporary fault-injection routes were removed after verification.
+- A USD 1.00 full refund completed in PayPal Sandbox and produced `PAYMENT.CAPTURE.REFUNDED`.
+- Migration `004_reconcile_refund_links.sql` matched the refund through PayPal invoice/HATEOAS links.
+- The order is flagged `financial_status=refunded`; the unmatched-adjustment count is zero.
+- The user's delivered quota was not automatically deducted, as required by the current manual-review policy.
+- The temporary Sandbox refund route was removed after the drill.
 
 ## Server-side pricing
 
@@ -70,11 +75,12 @@ Do not enable Live or public payments until every item is complete:
    - `mode: sandbox` during testing.
    - `reconciliationEnabled: true`.
    - `financialEventLedgerEnabled: true`.
+   - `financialEventLinkMatchingEnabled: true`.
    - `automaticQuotaClawbackEnabled: false`.
    - `paypalLiveEnabled: false`.
    - `publicPaymentsEnabled: false`.
 2. Confirm the delivery-review and financial-review queues are empty.
-3. Test a Sandbox refund event and confirm it is ledgered exactly once.
+3. Resend the verified Sandbox refund webhook and confirm the existing adjustment is updated rather than duplicated.
 4. Test a Sandbox dispute lifecycle and document the manual operating response.
 5. Define the operator decision for unused, partially consumed, and fully consumed quota after a refund or buyer-favour dispute.
 6. Create a separate Live webhook and subscribe to the same required events.
