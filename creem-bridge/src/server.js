@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { getPlan, config } from './config.js';
 import { query, withTransaction } from './db.js';
 import { createPaypalOrder, capturePaypalOrder, verifyPaypalWebhook } from './paypal.js';
-import { addQuota } from './oneapi.js';
+import { createQuotaRedemption, redeemQuota } from './oneapi.js';
 import { paymentResultPage, paypalReturnTokenMatches } from './pages.js';
 import { secretsMatch } from './security.js';
 
@@ -121,7 +121,27 @@ async function deliverCredits(orderId) {
   const claim = await claimCreditDelivery(orderId);
   if (claim.action !== 'deliver') return claim;
   try {
-    const result = await addQuota({ userId: claim.order.user_id, username: claim.order.username, credits: claim.order.credits });
+    const prepared = await createQuotaRedemption({
+      orderId,
+      userId: claim.order.user_id,
+      username: claim.order.username,
+      credits: claim.order.credits,
+    });
+    await query(`UPDATE credit_deliveries SET one_api_result = $1 WHERE order_id = $2`, [{
+      mode: 'redemption_prepared',
+      redemptionName: prepared.name,
+      redemptionKey: prepared.key,
+      userId: prepared.userId,
+      username: prepared.username,
+      credits: prepared.credits,
+    }, orderId]);
+    const result = await redeemQuota({
+      key: prepared.key,
+      name: prepared.name,
+      userId: claim.order.user_id,
+      username: claim.order.username,
+      credits: claim.order.credits,
+    });
     await withTransaction(async (client) => {
       await client.query(`UPDATE credit_deliveries SET status = 'credited', one_api_result = $1, delivered_at = NOW() WHERE order_id = $2`, [result, orderId]);
       await client.query(`UPDATE orders SET status = 'credited', credited_at = NOW() WHERE id = $1`, [orderId]);

@@ -8,7 +8,8 @@ This service is a deliberately closed-by-default payment bridge for NexaRelay.
 - PayPal checkout uses `PAY_NOW` with no shipping because all plans deliver digital API credits.
 - Approval returns to a token-bound bridge route that performs an idempotent capture; cancellation never captures.
 - PostgreSQL stores orders, webhook events, and credit deliveries.
-- A delivery that may have reached One API but lacks a final acknowledgement is sent to `review_required`; it is never blindly retried.
+- Credit delivery uses a single-use One API redemption code. One API consumes the code and increments quota atomically in its own transaction, avoiding read-modify-write quota races.
+- A delivery that may have reached One API but lacks a final acknowledgement is sent to `review_required`; it is never blindly retried. The prepared redemption reference remains in the payment ledger for reconciliation.
 
 ## Plans
 
