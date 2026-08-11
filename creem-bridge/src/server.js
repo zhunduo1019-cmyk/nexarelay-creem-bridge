@@ -523,7 +523,9 @@ async function handlePaypalWebhook(req, res) {
 }
 
 async function orderStatus(res, orderId) {
-  const result = await query('SELECT id, plan_key, amount_cents, currency, credits, status, created_at, paid_at, credited_at FROM orders WHERE id = $1', [orderId]);
+  const result = await query(`SELECT id, plan_key, amount_cents, currency, credits, status,
+    financial_status, created_at, paid_at, credited_at
+    FROM orders WHERE id = $1`, [orderId]);
   if (!result.rowCount) return json(res, 404, { success: false, message: 'order not found' });
   return json(res, 200, { success: true, data: result.rows[0] });
 }
@@ -639,6 +641,7 @@ async function route(req, res) {
         creditDeliveryMode: 'one_api_redemption',
         reconciliationEnabled: true,
         financialEventLedgerEnabled: true,
+        financialEventLinkMatchingEnabled: true,
         automaticQuotaClawbackEnabled: false,
         paypalLiveEnabled: settings.paypalLiveEnabled,
         publicPaymentsEnabled: settings.publicPaymentsEnabled,
