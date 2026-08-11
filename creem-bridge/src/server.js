@@ -282,7 +282,16 @@ async function orderStatus(res, orderId) {
 async function route(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
-    if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, provider: 'paypal', mode: config().paypalMode, publicPaymentsEnabled: config().publicPaymentsEnabled });
+    if (req.method === 'GET' && url.pathname === '/health') {
+      const settings = config();
+      return json(res, 200, {
+        ok: true,
+        provider: 'paypal',
+        mode: settings.paypalMode,
+        paypalLiveEnabled: settings.paypalLiveEnabled,
+        publicPaymentsEnabled: settings.publicPaymentsEnabled,
+      });
+    }
     if (req.method === 'GET' && url.pathname === '/') return json(res, 200, { success: false, message: 'Online card top-ups are currently unavailable.' });
     if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/checkout' || url.pathname === '/api/payment/creem/checkout')) return json(res, 503, { success: false, message: 'Online card top-ups are currently unavailable.' });
     if (req.method === 'POST' && url.pathname === '/api/payment/creem/webhook') return json(res, 410, { success: false, message: 'Creem payments are no longer supported.' });
