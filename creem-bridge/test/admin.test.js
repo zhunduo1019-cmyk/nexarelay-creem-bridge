@@ -35,6 +35,13 @@ test('admin reconciliation endpoints require the exact bridge secret', async () 
       });
       assert.equal(accepted.status, 400);
       assert.deepEqual(await accepted.json(), { success: false, message: 'invalid order id' });
+
+      const drill = await fetch(`${baseUrl}/api/payment/admin/sandbox/orders/not-a-uuid/arm-post-redemption-failure`, {
+        method: 'POST',
+        headers: { 'x-bridge-secret': 'bridge-admin-secret' },
+      });
+      assert.equal(drill.status, 400);
+      assert.deepEqual(await drill.json(), { success: false, message: 'invalid order id' });
     });
   } finally {
     if (previousSecret === undefined) delete process.env.BRIDGE_CHECKOUT_SECRET;

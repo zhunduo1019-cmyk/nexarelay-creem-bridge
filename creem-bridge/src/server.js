@@ -12,6 +12,11 @@ import {
 } from './oneapi.js';
 import { paymentResultPage, paypalReturnTokenMatches } from './pages.js';
 import { secretsMatch } from './security.js';
+import {
+  armPostRedemptionFailure,
+  consumePostRedemptionFailure,
+  sandboxDrillAvailable,
+} from './sandbox-drill.js';
 
 const port = Number(process.env.PORT || 8787);
 
@@ -183,6 +188,9 @@ async function deliverCredits(orderId) {
       username: claim.order.username,
       credits: claim.order.credits,
     });
+    if (consumePostRedemptionFailure(orderId)) {
+      throw new Error('Sandbox reconciliation drill: simulated acknowledgement failure after One API redemption');
+    }
     await completeCreditDelivery(orderId, result);
     return { action: 'credited', result };
   } catch (error) {
@@ -461,6 +469,27 @@ async function retryReviewedOrder(req, res, orderId) {
   }
 }
 
+async function armSandboxReconciliationDrill(req, res, orderId) {
+  if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
+  if (!sandboxDrillAvailable(config())) {
+    return json(res, 409, { success: false, message: 'sandbox reconciliation drill is unavailable' });
+  }
+  if (!validOrderId(orderId)) return json(res, 400, { success: false, message: 'invalid order id' });
+
+  const result = await query('SELECT id, status, paid_at FROM orders WHERE id = $1', [orderId]);
+  if (!result.rowCount) return json(res, 404, { success: false, message: 'order not found' });
+  const order = result.rows[0];
+  if (order.status !== 'pending' || order.paid_at) {
+    return json(res, 409, { success: false, message: 'only an unpaid pending sandbox order can be armed' });
+  }
+
+  armPostRedemptionFailure(orderId);
+  return json(res, 200, {
+    success: true,
+    data: { orderId, armed: true, failurePoint: 'after_one_api_redemption_before_local_acknowledgement' },
+  });
+}
+
 async function route(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
@@ -472,6 +501,7 @@ async function route(req, res) {
         mode: settings.paypalMode,
         creditDeliveryMode: 'one_api_redemption',
         reconciliationEnabled: true,
+        sandboxReconciliationDrillAvailable: sandboxDrillAvailable(settings),
         paypalLiveEnabled: settings.paypalLiveEnabled,
         publicPaymentsEnabled: settings.publicPaymentsEnabled,
       });
@@ -485,6 +515,9 @@ async function route(req, res) {
     if (req.method === 'GET' && url.pathname === '/api/payment/admin/review-required') return reviewRequiredOrders(req, res, url);
     if (req.method === 'POST' && /^\/api\/payment\/admin\/orders\/[^/]+\/retry-credit$/.test(url.pathname)) {
       return retryReviewedOrder(req, res, url.pathname.split('/')[5]);
+    }
+    if (req.method === 'POST' && /^\/api\/payment\/admin\/sandbox\/orders\/[^/]+\/arm-post-redemption-failure$/.test(url.pathname)) {
+      return armSandboxReconciliationDrill(req, res, url.pathname.split('/')[6]);
     }
     if (req.method === 'GET' && /^\/api\/payment\/paypal\/return\/[^/]+$/.test(url.pathname)) return paypalReturn(res, url, url.pathname.split('/').pop());
     if (req.method === 'GET' && /^\/api\/payment\/paypal\/cancel\/[^/]+$/.test(url.pathname)) return paypalCancel(res, url, url.pathname.split('/').pop());
