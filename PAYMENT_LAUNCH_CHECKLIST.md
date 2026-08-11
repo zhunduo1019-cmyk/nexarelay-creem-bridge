@@ -26,6 +26,10 @@ This file records the current PayPal safety state and the remaining production g
 - Resending the same refund Webhook left exactly one payment event and one refund adjustment; the unmatched count remained zero.
 - The user's delivered quota was not automatically deducted, as required by the current manual-review policy.
 - The temporary Sandbox refund route was removed after the drill.
+- A Sandbox buyer opened and then cancelled a USD 1.00 digital-goods dispute.
+- PayPal delivered `CUSTOMER.DISPUTE.CREATED`, three lifecycle `CUSTOMER.DISPUTE.UPDATED` events, and `CUSTOMER.DISPUTE.RESOLVED`.
+- All five dispute events remained associated with one dispute adjustment; the final adjustment status is `resolved`, the order is `financial_status=dispute_resolved`, and the unmatched-adjustment count is zero.
+- The credited order and delivered quota were preserved while `financial_review_required=true` remained set for an operator decision.
 
 ## Server-side pricing
 
@@ -82,7 +86,7 @@ Do not enable Live or public payments until every item is complete:
    - `publicPaymentsEnabled: false`.
 2. Confirm the delivery-review and financial-review queues are empty.
 3. Completed 2026-08-11: the verified Sandbox refund Webhook was resent and the existing adjustment was not duplicated.
-4. Test a Sandbox dispute lifecycle and document the manual operating response.
+4. Completed 2026-08-11: a Sandbox dispute completed the `CREATED` -> `UPDATED` -> `RESOLVED` lifecycle, stayed linked to one adjustment, and preserved the credited order for manual review.
 5. Define the operator decision for unused, partially consumed, and fully consumed quota after a refund or buyer-favour dispute.
 6. Create a separate Live webhook and subscribe to the same required events.
 7. Store Live credentials and the Live webhook ID only in Render.
