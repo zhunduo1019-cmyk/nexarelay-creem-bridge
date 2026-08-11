@@ -28,3 +28,71 @@ test('live mode requires an independent explicit opt-in', () => {
     else process.env.PAYPAL_LIVE_ENABLED = previousLiveEnabled;
   }
 });
+
+test('sandbox and live credentials remain in separate slots', () => {
+  const keys = [
+    'PAYPAL_MODE',
+    'PAYPAL_LIVE_ENABLED',
+    'PAYPAL_CLIENT_ID',
+    'PAYPAL_CLIENT_SECRET',
+    'PAYPAL_WEBHOOK_ID',
+    'PAYPAL_SANDBOX_CLIENT_ID',
+    'PAYPAL_SANDBOX_CLIENT_SECRET',
+    'PAYPAL_SANDBOX_WEBHOOK_ID',
+    'PAYPAL_LIVE_CLIENT_ID',
+    'PAYPAL_LIVE_CLIENT_SECRET',
+    'PAYPAL_LIVE_WEBHOOK_ID',
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+
+  try {
+    process.env.PAYPAL_MODE = 'sandbox';
+    process.env.PAYPAL_LIVE_ENABLED = 'false';
+    process.env.PAYPAL_CLIENT_ID = 'legacy-sandbox-client';
+    process.env.PAYPAL_CLIENT_SECRET = 'legacy-sandbox-secret';
+    process.env.PAYPAL_WEBHOOK_ID = 'legacy-sandbox-webhook';
+    process.env.PAYPAL_SANDBOX_CLIENT_ID = 'sandbox-client';
+    process.env.PAYPAL_SANDBOX_CLIENT_SECRET = 'sandbox-secret';
+    process.env.PAYPAL_SANDBOX_WEBHOOK_ID = 'sandbox-webhook';
+    process.env.PAYPAL_LIVE_CLIENT_ID = 'live-client';
+    process.env.PAYPAL_LIVE_CLIENT_SECRET = 'live-secret';
+    process.env.PAYPAL_LIVE_WEBHOOK_ID = 'live-webhook';
+
+    assert.deepEqual(
+      {
+        clientId: config().paypalClientId,
+        clientSecret: config().paypalClientSecret,
+        webhookId: config().paypalWebhookId,
+      },
+      { clientId: 'sandbox-client', clientSecret: 'sandbox-secret', webhookId: 'sandbox-webhook' },
+    );
+
+    process.env.PAYPAL_MODE = 'live';
+    process.env.PAYPAL_LIVE_ENABLED = 'true';
+    assert.deepEqual(
+      {
+        clientId: config().paypalClientId,
+        clientSecret: config().paypalClientSecret,
+        webhookId: config().paypalWebhookId,
+      },
+      { clientId: 'live-client', clientSecret: 'live-secret', webhookId: 'live-webhook' },
+    );
+
+    delete process.env.PAYPAL_LIVE_CLIENT_ID;
+    delete process.env.PAYPAL_LIVE_CLIENT_SECRET;
+    delete process.env.PAYPAL_LIVE_WEBHOOK_ID;
+    assert.deepEqual(
+      {
+        clientId: config().paypalClientId,
+        clientSecret: config().paypalClientSecret,
+        webhookId: config().paypalWebhookId,
+      },
+      { clientId: undefined, clientSecret: undefined, webhookId: undefined },
+    );
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});

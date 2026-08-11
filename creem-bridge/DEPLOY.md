@@ -10,9 +10,12 @@ DATABASE_URL=<Render PostgreSQL internal connection string>
 PAYMENT_PUBLIC_ENABLED=false
 PAYPAL_MODE=sandbox
 PAYPAL_LIVE_ENABLED=false
-PAYPAL_CLIENT_ID=<sandbox client id>
-PAYPAL_CLIENT_SECRET=<sandbox client secret>
-PAYPAL_WEBHOOK_ID=<sandbox webhook id>
+PAYPAL_SANDBOX_CLIENT_ID=<sandbox client id>
+PAYPAL_SANDBOX_CLIENT_SECRET=<sandbox client secret>
+PAYPAL_SANDBOX_WEBHOOK_ID=<sandbox webhook id>
+PAYPAL_LIVE_CLIENT_ID=<live client id; may be staged while mode remains sandbox>
+PAYPAL_LIVE_CLIENT_SECRET=<live client secret; may be staged while mode remains sandbox>
+PAYPAL_LIVE_WEBHOOK_ID=<separate live webhook id>
 ONE_API_BASE_URL=https://api.getnexarelay.com
 ONE_API_ADMIN_TOKEN=<One API system token>
 ONE_API_AUTH_HEADER=Authorization
@@ -35,6 +38,11 @@ CUSTOMER.DISPUTE.CREATED
 CUSTOMER.DISPUTE.UPDATED
 CUSTOMER.DISPUTE.RESOLVED
 ```
+
+The legacy `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, and `PAYPAL_WEBHOOK_ID`
+variables remain accepted only as Sandbox fallbacks. Live mode never falls back
+to them. This makes it safe to stage the dedicated Live variables while keeping
+`PAYPAL_MODE=sandbox` and `PAYPAL_LIVE_ENABLED=false`.
 
 Review them through `GET /api/payment/admin/financial-review`. `/health` must report `financialEventLedgerEnabled: true` and `automaticQuotaClawbackEnabled: false`. Financial events are ledgered and flagged for manual review; they never deduct quota automatically.
 

@@ -29,7 +29,7 @@ This service is a deliberately closed-by-default payment bridge for NexaRelay.
 
 For the initial test, keep `PAYMENT_PUBLIC_ENABLED=false`, `PAYPAL_MODE=sandbox`, `PAYPAL_LIVE_ENABLED=false`, and use `x-bridge-secret` from an internal test client. Do not set live credentials or enable public payments until the complete sandbox test has succeeded.
 
-Live mode is fail-closed: `PAYPAL_MODE=live` is rejected unless the separate `PAYPAL_LIVE_ENABLED=true` switch is also present. Keep that switch false until the production-readiness review is complete.
+Live mode is fail-closed: `PAYPAL_MODE=live` is rejected unless the separate `PAYPAL_LIVE_ENABLED=true` switch is also present. Sandbox and Live credentials occupy independent `PAYPAL_SANDBOX_*` and `PAYPAL_LIVE_*` variables; Live mode never falls back to the legacy generic Sandbox variables. Keep the Live switch false until the production-readiness review is complete.
 
 ## Routes
 
@@ -59,8 +59,10 @@ Refund, reversal, and dispute webhooks are stored idempotently in `payment_event
 Never commit or send these values in chat, screenshots, or client-side code:
 
 ```text
-PAYPAL_CLIENT_SECRET
-PAYPAL_WEBHOOK_ID
+PAYPAL_SANDBOX_CLIENT_SECRET
+PAYPAL_SANDBOX_WEBHOOK_ID
+PAYPAL_LIVE_CLIENT_SECRET
+PAYPAL_LIVE_WEBHOOK_ID
 ONE_API_ADMIN_TOKEN
 DATABASE_URL
 BRIDGE_CHECKOUT_SECRET

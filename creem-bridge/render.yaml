@@ -30,6 +30,18 @@ services:
         sync: false
       - key: PAYPAL_WEBHOOK_ID
         sync: false
+      - key: PAYPAL_SANDBOX_CLIENT_ID
+        sync: false
+      - key: PAYPAL_SANDBOX_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_SANDBOX_WEBHOOK_ID
+        sync: false
+      - key: PAYPAL_LIVE_CLIENT_ID
+        sync: false
+      - key: PAYPAL_LIVE_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_LIVE_WEBHOOK_ID
+        sync: false
       - key: ONE_API_ADMIN_TOKEN
         sync: false
       - key: ONE_API_AUTH_HEADER

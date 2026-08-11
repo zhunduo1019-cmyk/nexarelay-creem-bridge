@@ -55,6 +55,11 @@ PAYPAL_LIVE_ENABLED=false
 ```
 
 All credentials and tokens must remain only in Render secret environment variables.
+Sandbox credentials use `PAYPAL_SANDBOX_CLIENT_ID`,
+`PAYPAL_SANDBOX_CLIENT_SECRET`, and `PAYPAL_SANDBOX_WEBHOOK_ID`. Live credentials
+use the independent `PAYPAL_LIVE_CLIENT_ID`, `PAYPAL_LIVE_CLIENT_SECRET`, and
+`PAYPAL_LIVE_WEBHOOK_ID` slots. The legacy generic variables are Sandbox-only
+fallbacks and are never accepted in Live mode.
 
 ## Required Sandbox webhook events
 
@@ -92,7 +97,9 @@ Do not enable Live or public payments until every item is complete:
 4. Completed 2026-08-11: a Sandbox dispute completed the `CREATED` -> `UPDATED` -> `RESOLVED` lifecycle, stayed linked to one adjustment, and preserved the credited order for manual review.
 5. Completed 2026-08-11: `FINANCIAL_REVIEW_RUNBOOK.md` defines the no-loss, fully recoverable, partially consumed, and fully consumed quota decisions. The bridge records authenticated resolutions but never changes One API quota automatically.
 6. Create a separate Live webhook and subscribe to the same required events.
-7. Store Live credentials and the Live webhook ID only in Render.
+7. Store Live credentials and the Live webhook ID only in Render's dedicated
+   `PAYPAL_LIVE_*` variables while `PAYPAL_MODE=sandbox` and
+   `PAYPAL_LIVE_ENABLED=false` remain unchanged.
 8. Keep `PAYMENT_PUBLIC_ENABLED=false` for the first controlled Live USD 1.00 payment.
 9. Enable `PAYPAL_MODE=live` only together with the independent `PAYPAL_LIVE_ENABLED=true` gate.
 10. Verify the first controlled Live payment, webhook, ledger entry, quota delivery, and reconciliation queues before considering public access.

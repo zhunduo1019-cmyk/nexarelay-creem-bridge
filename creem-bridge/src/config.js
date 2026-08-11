@@ -18,6 +18,20 @@ export function config() {
     throw new Error('PAYPAL_MODE=live requires PAYPAL_LIVE_ENABLED=true');
   }
 
+  // Keep Live credentials in dedicated variables so preparing them cannot
+  // overwrite or silently replace the verified Sandbox configuration.
+  const paypalCredentials = mode === 'live'
+    ? {
+        clientId: process.env.PAYPAL_LIVE_CLIENT_ID,
+        clientSecret: process.env.PAYPAL_LIVE_CLIENT_SECRET,
+        webhookId: process.env.PAYPAL_LIVE_WEBHOOK_ID,
+      }
+    : {
+        clientId: process.env.PAYPAL_SANDBOX_CLIENT_ID || process.env.PAYPAL_CLIENT_ID,
+        clientSecret: process.env.PAYPAL_SANDBOX_CLIENT_SECRET || process.env.PAYPAL_CLIENT_SECRET,
+        webhookId: process.env.PAYPAL_SANDBOX_WEBHOOK_ID || process.env.PAYPAL_WEBHOOK_ID,
+      };
+
   return {
     publicBaseUrl: process.env.PUBLIC_BASE_URL,
     databaseUrl: process.env.DATABASE_URL,
@@ -27,9 +41,9 @@ export function config() {
     oneApiAuthScheme: process.env.ONE_API_AUTH_SCHEME || 'Bearer',
     paypalMode: mode,
     paypalLiveEnabled,
-    paypalClientId: process.env.PAYPAL_CLIENT_ID,
-    paypalClientSecret: process.env.PAYPAL_CLIENT_SECRET,
-    paypalWebhookId: process.env.PAYPAL_WEBHOOK_ID,
+    paypalClientId: paypalCredentials.clientId,
+    paypalClientSecret: paypalCredentials.clientSecret,
+    paypalWebhookId: paypalCredentials.webhookId,
     publicPaymentsEnabled: process.env.PAYMENT_PUBLIC_ENABLED === 'true',
     bridgeCheckoutSecret: process.env.BRIDGE_CHECKOUT_SECRET,
   };
