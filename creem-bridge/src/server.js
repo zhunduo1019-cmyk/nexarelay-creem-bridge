@@ -21,6 +21,7 @@ import {
   describeFinancialEvent,
 } from './financial-events.js';
 import { financialReviewDecisions } from './financial-review-policy.js';
+import { acceptsCompletedCapture, cancelPendingOrder } from './order-lifecycle.js';
 
 const port = Number(process.env.PORT || 8787);
 
@@ -297,7 +298,7 @@ async function markPaidAndDeliver(providerOrderId, providerEventId, eventType, p
     const eventInsert = await client.query(`INSERT INTO payment_events (provider, provider_event_id, event_type, order_id, payload)
       VALUES ('paypal',$1,$2,$3,$4) ON CONFLICT (provider, provider_event_id) DO NOTHING RETURNING id`, [providerEventId, eventType, order.id, payload]);
     if (!eventInsert.rowCount) return { found: true, duplicate: true, order };
-    if (order.status === 'pending') await client.query(`UPDATE orders
+    if (acceptsCompletedCapture(order)) await client.query(`UPDATE orders
       SET status = 'paid', paid_at = NOW(), capture_id = COALESCE(capture_id, $2)
       WHERE id = $1`, [order.id, captureId || null]);
     else if (captureId) await client.query(`UPDATE orders SET capture_id = COALESCE(capture_id, $2) WHERE id = $1`, [order.id, captureId]);
@@ -404,11 +405,13 @@ async function paypalCancel(res, url, localOrderId) {
     title: '订单不存在', heading: '找不到这笔订单', message: '请返回 NexaRelay 后重新发起支付。', tone: 'error', accountUrl: accountUrl(),
   }));
   const token = url.searchParams.get('token');
-  if (token && !paypalReturnTokenMatches(order, token)) return html(res, 400, paymentResultPage({
+  if (!paypalReturnTokenMatches(order, token)) return html(res, 400, paymentResultPage({
     title: '支付返回无效', heading: '无法验证 PayPal 返回', message: '订单标识不匹配，系统没有更改订单。', tone: 'error', order, accountUrl: accountUrl(),
   }));
+  const cancellation = await cancelPendingOrder(query, localOrderId);
+  const currentOrder = cancellation.order || order;
   return html(res, 200, paymentResultPage({
-    title: '支付已取消', heading: '支付已取消', message: '系统没有捕获这笔付款，也没有发放额度。', tone: 'pending', order, accountUrl: accountUrl(),
+    title: '支付已取消', heading: '支付已取消', message: '系统没有捕获这笔付款，也没有发放额度。', tone: 'pending', order: currentOrder, accountUrl: accountUrl(),
   }));
 }
 

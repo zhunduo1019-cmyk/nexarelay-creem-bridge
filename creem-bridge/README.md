@@ -6,7 +6,7 @@ This service is a deliberately closed-by-default payment bridge for NexaRelay.
 - Public payment creation remains disabled unless `PAYMENT_PUBLIC_ENABLED=true`.
 - The PayPal order amount, currency, and credits are selected only from the server-side plan table.
 - PayPal checkout uses `PAY_NOW` with no shipping because all plans deliver digital API credits.
-- Approval returns to a token-bound bridge route that performs an idempotent capture; cancellation never captures.
+- Approval returns to a token-bound bridge route that performs an idempotent capture. A token-bound cancellation atomically closes only a pristine pending order; a later verified completed-capture event remains authoritative and safely restores the paid delivery flow.
 - PostgreSQL stores orders, webhook events, and credit deliveries.
 - Credit delivery uses a single-use One API redemption code. One API consumes the code and increments quota atomically in its own transaction, avoiding read-modify-write quota races.
 - A delivery that may have reached One API but lacks a final acknowledgement is sent to `review_required`; it is never blindly retried. An authenticated reconciliation retry first inspects the original single-use redemption: an unused code is redeemed once, while an already-used code only repairs the local ledger.
@@ -48,7 +48,7 @@ POST  /api/payment/admin/orders/:orderId/retry-credit
 
 `POST /api/payment/paypal/orders` requires `plan`, `userId`, and `username`. It rejects browser-supplied prices or credits because those fields are not part of the request contract.
 
-PayPal redirects approved buyers to the return route. The route verifies PayPal's `token` against the stored provider order ID, captures the approved order with an idempotency key, delivers credits once, and renders a user-facing result page. The cancel route never captures an order.
+PayPal redirects approved buyers to the return route. The route verifies PayPal's `token` against the stored provider order ID, captures the approved order with an idempotency key, delivers credits once, and renders a user-facing result page. The cancel route requires the same token match and atomically changes only an unpaid, uncaptured, uncredited `pending` order to `cancelled`; it never captures an order.
 
 Both admin reconciliation routes always require the exact `x-bridge-secret`, even if public payments are enabled. The list route never returns the stored redemption key. Retry only accepts paid orders in a reviewable state and records attempt count, timestamp, and the latest sanitized error in PostgreSQL.
 

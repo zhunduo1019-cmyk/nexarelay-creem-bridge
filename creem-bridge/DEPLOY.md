@@ -89,3 +89,9 @@ Live drill therefore still requires a legitimate non-Mainland China buyer and
 real matching billing details.
 
 Do not change `PAYMENT_PUBLIC_ENABLED` to `true`, switch to `PAYPAL_MODE=live`, set `PAYPAL_LIVE_ENABLED=true`, or expose a public checkout UI during this phase.
+
+The PayPal cancel callback now requires the provider order token and atomically
+marks only an unpaid, uncaptured, uncredited pending order as `cancelled`. If a
+verified completed-capture event arrives after that callback, PayPal's financial
+state remains authoritative and the order re-enters the normal paid delivery
+flow. This closes the manual ledger-cleanup gap without risking missed funds.
