@@ -34,7 +34,7 @@ Live mode is fail-closed: `PAYPAL_MODE=live` is rejected unless the separate `PA
 ## Routes
 
 ```text
-GET   /health
+GET   /health  # includes PostgreSQL ledger-schema readiness
 POST  /api/payment/paypal/orders
 POST  /api/payment/paypal/orders/:orderId/capture
 POST  /api/payment/paypal/webhook

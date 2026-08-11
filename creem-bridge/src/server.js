@@ -22,6 +22,7 @@ import {
 } from './financial-events.js';
 import { financialReviewDecisions } from './financial-review-policy.js';
 import { acceptsCompletedCapture, cancelPendingOrder } from './order-lifecycle.js';
+import { databaseIsReady } from './readiness.js';
 
 const port = Number(process.env.PORT || 8787);
 
@@ -663,10 +664,12 @@ async function route(req, res) {
   try {
     if (req.method === 'GET' && url.pathname === '/health') {
       const settings = config();
-      return json(res, 200, {
-        ok: true,
+      const databaseReady = await databaseIsReady(query);
+      return json(res, databaseReady ? 200 : 503, {
+        ok: databaseReady,
         provider: 'paypal',
         mode: settings.paypalMode,
+        databaseReady,
         creditDeliveryMode: 'one_api_redemption',
         reconciliationEnabled: true,
         financialEventLedgerEnabled: true,

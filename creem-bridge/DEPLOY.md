@@ -23,7 +23,7 @@ ONE_API_AUTH_SCHEME=Bearer
 BRIDGE_CHECKOUT_SECRET=<long random value>
 ```
 
-Use `node src/migrate.js && node src/server.js` as the start command. Configure the PayPal sandbox webhook only after the bridge is live and `/health` returns `ok: true`.
+Use `node src/migrate.js && node src/server.js` as the start command. Configure the PayPal sandbox webhook only after the bridge is live and `/health` returns HTTP 200 with both `ok: true` and `databaseReady: true`. The health check fails closed with HTTP 503 if PostgreSQL is unreachable or a required ledger table is missing.
 
 After each deployment, verify that `/health` reports `reconciliationEnabled: true`. Review items through `GET /api/payment/admin/review-required` and retry a single paid item through `POST /api/payment/admin/orders/:orderId/retry-credit`, passing `x-bridge-secret` only from an administrator-controlled client.
 

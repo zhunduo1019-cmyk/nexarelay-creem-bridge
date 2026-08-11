@@ -124,4 +124,5 @@ Do not enable Live or public payments until every item is complete:
 - Do not enable public payment creation.
 - Do not automatically deduct quota for refunds or disputes.
 - Do not delete Sandbox credentials, webhook configuration, ledger rows, or database backups.
+- Follow `DATABASE_RECOVERY_RUNBOOK.md`; verify an off-platform logical export and restrict the database's external `0.0.0.0/0` rule before enabling Live payments.
 - Do not expose secrets in chat, screenshots, logs, GitHub, or public pages.

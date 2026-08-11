@@ -9,6 +9,9 @@ export function getPool() {
     pool = new Pool({
       connectionString: requireConfig(config().databaseUrl, 'DATABASE_URL'),
       ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
+      max: 5,
+      connectionTimeoutMillis: 5_000,
+      idleTimeoutMillis: 30_000,
     });
   }
   return pool;
