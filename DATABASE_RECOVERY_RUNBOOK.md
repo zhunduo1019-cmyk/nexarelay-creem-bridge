@@ -10,6 +10,12 @@ Verified in the Render dashboard on 2026-08-11:
 - Point-in-time recovery: any available timestamp in the past 3 days
 - Logical exports: supported; Render retains each export for at least 7 days
 
+The first Render logical export completed successfully at
+`2026-08-11 14:45 UTC` (`.dir.tar.gz`). Its signed download URL is intentionally
+not recorded in this repository. This confirms server-side export creation, but
+an encrypted off-platform copy and restore drill are still required before Live
+payments are enabled.
+
 The dashboard currently shows external PostgreSQL access allowed from
 `0.0.0.0/0`. This is not required by the bridge because it uses Render's
 internal database URL. Before Live payments are enabled, replace the broad rule

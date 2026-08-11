@@ -125,4 +125,5 @@ Do not enable Live or public payments until every item is complete:
 - Do not automatically deduct quota for refunds or disputes.
 - Do not delete Sandbox credentials, webhook configuration, ledger rows, or database backups.
 - Follow `DATABASE_RECOVERY_RUNBOOK.md`; verify an off-platform logical export and restrict the database's external `0.0.0.0/0` rule before enabling Live payments.
+- Render health monitoring now calls `/health`, and the first server-side logical export completed at `2026-08-11 14:45 UTC`. Downloading an encrypted off-platform copy and performing an isolated restore drill remain pending.
 - Do not expose secrets in chat, screenshots, logs, GitHub, or public pages.
