@@ -6,7 +6,7 @@ This service is a deliberately closed-by-default payment bridge for NexaRelay.
 - Public payment creation remains disabled unless `PAYMENT_PUBLIC_ENABLED=true`.
 - The PayPal order amount, currency, and credits are selected only from the server-side plan table.
 - PayPal checkout uses `PAY_NOW` with no shipping because all plans deliver digital API credits.
-- Approval and cancellation return to the bridge's read-only order status route under `PUBLIC_BASE_URL`.
+- Approval returns to a token-bound bridge route that performs an idempotent capture; cancellation never captures.
 - PostgreSQL stores orders, webhook events, and credit deliveries.
 - A delivery that may have reached One API but lacks a final acknowledgement is sent to `review_required`; it is never blindly retried.
 
@@ -26,7 +26,9 @@ This service is a deliberately closed-by-default payment bridge for NexaRelay.
 4. Run `npm test`.
 5. Run `npm start`.
 
-For the initial test, keep `PAYMENT_PUBLIC_ENABLED=false`, `PAYPAL_MODE=sandbox`, and use `x-bridge-secret` from an internal test client. Do not set live credentials or enable public payments until the complete sandbox test has succeeded.
+For the initial test, keep `PAYMENT_PUBLIC_ENABLED=false`, `PAYPAL_MODE=sandbox`, `PAYPAL_LIVE_ENABLED=false`, and use `x-bridge-secret` from an internal test client. Do not set live credentials or enable public payments until the complete sandbox test has succeeded.
+
+Live mode is fail-closed: `PAYPAL_MODE=live` is rejected unless the separate `PAYPAL_LIVE_ENABLED=true` switch is also present. Keep that switch false until the production-readiness review is complete.
 
 ## Routes
 

@@ -13,6 +13,10 @@ export function getPlan(planKey) {
 export function config() {
   const mode = process.env.PAYPAL_MODE || 'sandbox';
   if (!['sandbox', 'live'].includes(mode)) throw new Error('PAYPAL_MODE must be sandbox or live');
+  const paypalLiveEnabled = process.env.PAYPAL_LIVE_ENABLED === 'true';
+  if (mode === 'live' && !paypalLiveEnabled) {
+    throw new Error('PAYPAL_MODE=live requires PAYPAL_LIVE_ENABLED=true');
+  }
 
   return {
     publicBaseUrl: process.env.PUBLIC_BASE_URL,
@@ -22,6 +26,7 @@ export function config() {
     oneApiAuthHeader: process.env.ONE_API_AUTH_HEADER || 'Authorization',
     oneApiAuthScheme: process.env.ONE_API_AUTH_SCHEME || 'Bearer',
     paypalMode: mode,
+    paypalLiveEnabled,
     paypalClientId: process.env.PAYPAL_CLIENT_ID,
     paypalClientSecret: process.env.PAYPAL_CLIENT_SECRET,
     paypalWebhookId: process.env.PAYPAL_WEBHOOK_ID,

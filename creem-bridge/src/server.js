@@ -5,6 +5,7 @@ import { query, withTransaction } from './db.js';
 import { createPaypalOrder, capturePaypalOrder, verifyPaypalWebhook } from './paypal.js';
 import { addQuota } from './oneapi.js';
 import { paymentResultPage, paypalReturnTokenMatches } from './pages.js';
+import { secretsMatch } from './security.js';
 
 const port = Number(process.env.PORT || 8787);
 
@@ -42,7 +43,7 @@ async function readJson(req) {
 function paymentAccessAllowed(req) {
   const settings = config();
   if (settings.publicPaymentsEnabled) return true;
-  return Boolean(settings.bridgeCheckoutSecret) && req.headers['x-bridge-secret'] === settings.bridgeCheckoutSecret;
+  return secretsMatch(req.headers['x-bridge-secret'], settings.bridgeCheckoutSecret);
 }
 
 function parseOwner(input) {
