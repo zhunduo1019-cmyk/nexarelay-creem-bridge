@@ -12,11 +12,6 @@ import {
 } from './oneapi.js';
 import { paymentResultPage, paypalReturnTokenMatches } from './pages.js';
 import { secretsMatch } from './security.js';
-import {
-  armPostRedemptionFailure,
-  consumePostRedemptionFailure,
-  sandboxDrillAvailable,
-} from './sandbox-drill.js';
 
 const port = Number(process.env.PORT || 8787);
 
@@ -188,9 +183,6 @@ async function deliverCredits(orderId) {
       username: claim.order.username,
       credits: claim.order.credits,
     });
-    if (consumePostRedemptionFailure(orderId)) {
-      throw new Error('Sandbox reconciliation drill: simulated acknowledgement failure after One API redemption');
-    }
     await completeCreditDelivery(orderId, result);
     return { action: 'credited', result };
   } catch (error) {
@@ -469,63 +461,6 @@ async function retryReviewedOrder(req, res, orderId) {
   }
 }
 
-async function armSandboxReconciliationDrill(req, res, orderId) {
-  if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
-  if (!sandboxDrillAvailable(config())) {
-    return json(res, 409, { success: false, message: 'sandbox reconciliation drill is unavailable' });
-  }
-  if (!validOrderId(orderId)) return json(res, 400, { success: false, message: 'invalid order id' });
-
-  const result = await query('SELECT id, status, paid_at FROM orders WHERE id = $1', [orderId]);
-  if (!result.rowCount) return json(res, 404, { success: false, message: 'order not found' });
-  const order = result.rows[0];
-  if (order.status !== 'pending' || order.paid_at) {
-    return json(res, 409, { success: false, message: 'only an unpaid pending sandbox order can be armed' });
-  }
-
-  armPostRedemptionFailure(orderId);
-  return json(res, 200, {
-    success: true,
-    data: { orderId, armed: true, failurePoint: 'after_one_api_redemption_before_local_acknowledgement' },
-  });
-}
-
-async function createSandboxReconciliationDrill(req, res, sourceOrderId) {
-  if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
-  if (!sandboxDrillAvailable(config())) {
-    return json(res, 409, { success: false, message: 'sandbox reconciliation drill is unavailable' });
-  }
-  if (!validOrderId(sourceOrderId)) return json(res, 400, { success: false, message: 'invalid order id' });
-
-  const sourceResult = await query('SELECT * FROM orders WHERE id = $1', [sourceOrderId]);
-  if (!sourceResult.rowCount) return json(res, 404, { success: false, message: 'source order not found' });
-  const source = sourceResult.rows[0];
-  if (source.provider !== 'paypal' || source.status !== 'credited' || !source.paid_at) {
-    return json(res, 409, { success: false, message: 'source order must be a credited PayPal order' });
-  }
-  const plan = getPlan(source.plan_key);
-  if (!plan) return json(res, 409, { success: false, message: 'source order plan is unavailable' });
-
-  const order = {
-    id: crypto.randomUUID(), provider: 'paypal', user_id: source.user_id, username: source.username,
-    plan_key: source.plan_key, amount_cents: plan.amountCents, currency: plan.currency, credits: plan.credits, status: 'pending',
-  };
-  await query(`INSERT INTO orders (id, provider, user_id, username, plan_key, amount_cents, currency, credits, status)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [order.id, order.provider, order.user_id, order.username, order.plan_key, order.amount_cents, order.currency, order.credits, order.status]);
-  try {
-    const paypalOrder = await createPaypalOrder(order);
-    await query('UPDATE orders SET provider_order_id = $1 WHERE id = $2', [paypalOrder.id, order.id]);
-    armPostRedemptionFailure(order.id);
-    const response = orderResponse(order, paypalOrder);
-    response.data.drillArmed = true;
-    response.data.failurePoint = 'after_one_api_redemption_before_local_acknowledgement';
-    return json(res, 201, response);
-  } catch (error) {
-    await query(`UPDATE orders SET status = 'cancelled' WHERE id = $1`, [order.id]);
-    throw error;
-  }
-}
-
 async function route(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
@@ -537,7 +472,6 @@ async function route(req, res) {
         mode: settings.paypalMode,
         creditDeliveryMode: 'one_api_redemption',
         reconciliationEnabled: true,
-        sandboxReconciliationDrillAvailable: sandboxDrillAvailable(settings),
         paypalLiveEnabled: settings.paypalLiveEnabled,
         publicPaymentsEnabled: settings.publicPaymentsEnabled,
       });
@@ -551,12 +485,6 @@ async function route(req, res) {
     if (req.method === 'GET' && url.pathname === '/api/payment/admin/review-required') return reviewRequiredOrders(req, res, url);
     if (req.method === 'POST' && /^\/api\/payment\/admin\/orders\/[^/]+\/retry-credit$/.test(url.pathname)) {
       return retryReviewedOrder(req, res, url.pathname.split('/')[5]);
-    }
-    if (req.method === 'POST' && /^\/api\/payment\/admin\/sandbox\/orders\/[^/]+\/arm-post-redemption-failure$/.test(url.pathname)) {
-      return armSandboxReconciliationDrill(req, res, url.pathname.split('/')[6]);
-    }
-    if (req.method === 'POST' && /^\/api\/payment\/admin\/sandbox\/orders\/[^/]+\/create-reconciliation-drill$/.test(url.pathname)) {
-      return createSandboxReconciliationDrill(req, res, url.pathname.split('/')[6]);
     }
     if (req.method === 'GET' && /^\/api\/payment\/paypal\/return\/[^/]+$/.test(url.pathname)) return paypalReturn(res, url, url.pathname.split('/').pop());
     if (req.method === 'GET' && /^\/api\/payment\/paypal\/cancel\/[^/]+$/.test(url.pathname)) return paypalCancel(res, url, url.pathname.split('/').pop());

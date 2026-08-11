@@ -24,4 +24,8 @@ Use `node src/migrate.js && node src/server.js` as the start command. Configure 
 
 After each deployment, verify that `/health` reports `reconciliationEnabled: true`. Review items through `GET /api/payment/admin/review-required` and retry a single paid item through `POST /api/payment/admin/orders/:orderId/retry-credit`, passing `x-bridge-secret` only from an administrator-controlled client.
 
+## Verified Sandbox recovery drill
+
+On 2026-08-11, a controlled post-redemption acknowledgement failure was injected into a USD 1.00 Sandbox order. The order entered `review_required`; the authenticated retry reconciled the already-used single-use redemption, changed the order to `credited`, and removed it from the review queue. The user balance was USD 5.02-equivalent both immediately before and after retry, confirming that recovery did not deliver quota twice. The temporary fault-injection routes were removed after the drill.
+
 Do not change `PAYMENT_PUBLIC_ENABLED` to `true`, switch to `PAYPAL_MODE=live`, set `PAYPAL_LIVE_ENABLED=true`, or expose a public checkout UI during this phase.
