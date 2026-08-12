@@ -74,15 +74,11 @@ remain recorded outside this repository and Google Drive upload completion plus
 name/size verification passed. Restore still requires both the `.nrbak` and
 `.dpapi-key` under the original Windows user context.
 
-The dashboard currently shows external PostgreSQL access allowed from
-`0.0.0.0/0`. On 2026-08-12, this was verified as inherited from both the Render
-Workspace and Environment rather than a database-specific rule. This is not
-required by the bridge because it uses Render's internal database URL. Before
-Live payments are enabled, review every service affected by those inherited
-rules, then replace the broad rule with known administrator IP/CIDR entries (or
-remove external access after off-platform backup automation is established).
-Do not change the inherited rule from the database page without that impact
-review; doing so could affect other projects or lock out administrators.
+The dashboard originally showed external PostgreSQL access allowed from
+`0.0.0.0/0` at the Workspace, Environment, and database-specific levels. This
+is not required by the bridge because it uses Render's internal database URL.
+The Workspace and Environment rules must not be changed as part of this task
+because they also affect other resources.
 
 The cross-service impact review was completed on 2026-08-12. The Render
 workspace contains one project and one Production environment with three
@@ -95,6 +91,14 @@ external connections to `nexarelay-payments-db`; the payment bridge's internal
 Render connection remains available. Render's documentation confirms that
 inbound rules govern public-internet access only and that same-region services
 can continue using the database's internal URL.
+
+Completed on 2026-08-12: the database-specific `0.0.0.0/0` rule was removed
+after typing Render's required confirmation phrase. A full page reload showed
+zero PostgreSQL-specific CIDR entries and the dashboard warning that all
+internet traffic is blocked by PostgreSQL inbound IP rules. The Workspace and
+Environment rules were left unchanged. The deployed bridge then returned
+`ok=true` and `databaseReady=true` from `/health`, confirming its internal
+database connection remained available.
 
 Never paste a database URL, password, or PSQL command into chat, screenshots,
 issues, logs, or GitHub.

@@ -142,15 +142,15 @@ Do not enable Live or public payments until every item is complete:
 - Do not enable public payment creation.
 - Do not automatically deduct quota for refunds or disputes.
 - Do not delete Sandbox credentials, webhook configuration, ledger rows, or database backups.
-- Follow `DATABASE_RECOVERY_RUNBOOK.md`; verify an off-platform logical export and restrict the database's external `0.0.0.0/0` rule before enabling Live payments.
+- Completed 2026-08-12: verified an off-platform logical export and removed the database-specific external `0.0.0.0/0` rule. A reload showed zero PostgreSQL-specific CIDR entries and Render reported that all internet traffic is blocked by PostgreSQL inbound IP rules.
 - Render health monitoring now calls `/health`, and the first server-side logical export completed at `2026-08-11 14:45 UTC`. The encrypted off-platform copy and isolated restore drill are complete.
 - The first export now has a locally encrypted, authentication-checked copy, a verified decrypt/archive round-trip, a completed isolated PostgreSQL 18.4 restore drill, and a private independent Google Drive copy containing the encrypted backup, DPAPI key, and manifest. The Google Drive upload was verified by exact file names and displayed sizes; a remote download content-hash round-trip remains desirable but is not claimed as completed.
 - Completed 2026-08-12: the Render network-rule impact review found one project
   and one Production environment containing the payment bridge, payment
   database, and `autolens-ai`. Workspace- or environment-level restrictions
   would affect `autolens-ai` and must not be used for database-only hardening.
-  The PostgreSQL-specific rule can later be restricted or cleared without
-  affecting Render internal connections; do not change it until the required
-  administrator external IP/CIDR is known or external access can be disabled.
+  The PostgreSQL-specific rule was cleared without affecting Render internal
+  connections. The Workspace and Environment rules remain unchanged, and the
+  bridge health check still reports `ok=true` and `databaseReady=true`.
 - The protected operational summary and `npm run check:operations` must report all four queues at zero before any payment-mode change. The monitor intentionally fails closed and must receive the bridge secret only through its process environment.
 - Do not expose secrets in chat, screenshots, logs, GitHub, or public pages.
