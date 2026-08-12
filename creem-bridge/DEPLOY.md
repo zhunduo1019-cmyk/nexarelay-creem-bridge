@@ -41,6 +41,15 @@ unmatched-adjustment, or stale-pending queue is nonempty. Never place the bridge
 secret in the command history, repository, task description, log output, or a
 monitoring URL.
 
+On 2026-08-12, this check was executed inside the deployed Render service. It
+first failed closed on one 44.7-hour-old Sandbox pending order. A read-only
+audit established that PayPal no longer had the provider order (HTTP 404) and
+that the local row had no capture, paid timestamp, credited timestamp, credit
+delivery, or payment event. A guarded transaction changed only that exact safe
+candidate to `cancelled`. The repeated check passed with all four queue counts
+at zero while Sandbox mode remained enabled and Live, public payments, and
+automatic quota clawback remained disabled.
+
 The PayPal webhook must subscribe to these financial lifecycle events in addition to `PAYMENT.CAPTURE.COMPLETED`:
 
 ```text

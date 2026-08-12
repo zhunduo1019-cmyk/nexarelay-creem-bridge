@@ -26,6 +26,14 @@ This file records the current PayPal safety state and the remaining production g
 - Resending the same refund Webhook left exactly one payment event and one refund adjustment; the unmatched count remained zero.
 - The user's delivered quota was not automatically deducted, as required by the current manual-review policy.
 - The temporary Sandbox refund route was removed after the drill.
+- On 2026-08-12, the deployed protected operations monitor initially found one
+  Sandbox order that had remained `pending` for 44.7 hours. A read-only audit
+  confirmed that PayPal returned HTTP 404 for the provider order and that the
+  local order had no capture, paid timestamp, credited timestamp, delivery, or
+  payment event. The order was closed as `cancelled` with all of those guards
+  applied atomically. A repeated `npm run check:operations` then passed with
+  delivery-review, financial-review, unmatched-adjustment, and stale-pending
+  counts all at zero.
 - A Sandbox buyer opened and then cancelled a USD 1.00 digital-goods dispute.
 - PayPal delivered `CUSTOMER.DISPUTE.CREATED`, three lifecycle `CUSTOMER.DISPUTE.UPDATED` events, and `CUSTOMER.DISPUTE.RESOLVED`.
 - All five dispute events remained associated with one dispute adjustment; the final adjustment status is `resolved`, the order is `financial_status=dispute_resolved`, and the unmatched-adjustment count is zero.
@@ -99,6 +107,9 @@ Do not enable Live or public payments until every item is complete:
    - `paypalLiveEnabled: false`.
    - `publicPaymentsEnabled: false`.
 2. Confirm the delivery-review and financial-review queues are empty.
+   - Verified 2026-08-12 through the deployed protected operations monitor:
+     all four monitored queues were zero and the bridge remained in the
+     Sandbox/closed state.
 3. Completed 2026-08-11: the verified Sandbox refund Webhook was resent and the existing adjustment was not duplicated.
 4. Completed 2026-08-11: a Sandbox dispute completed the `CREATED` -> `UPDATED` -> `RESOLVED` lifecycle, stayed linked to one adjustment, and preserved the credited order for manual review.
 5. Completed 2026-08-11: `FINANCIAL_REVIEW_RUNBOOK.md` defines the no-loss, fully recoverable, partially consumed, and fully consumed quota decisions. The bridge records authenticated resolutions but never changes One API quota automatically.
