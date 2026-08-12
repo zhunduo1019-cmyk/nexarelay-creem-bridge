@@ -43,6 +43,7 @@ GET   /api/payment/paypal/cancel/:orderId
 GET   /api/payment/orders/:orderId
 GET   /api/payment/admin/review-required
 GET   /api/payment/admin/financial-review
+GET   /api/payment/admin/operational-summary
 POST  /api/payment/admin/orders/:orderId/retry-credit
 ```
 
@@ -51,6 +52,8 @@ POST  /api/payment/admin/orders/:orderId/retry-credit
 PayPal redirects approved buyers to the return route. The route verifies PayPal's `token` against the stored provider order ID, captures the approved order with an idempotency key, delivers credits once, and renders a user-facing result page. The cancel route requires the same token match and atomically changes only an unpaid, uncaptured, uncredited `pending` order to `cancelled`; it never captures an order.
 
 Both admin reconciliation routes always require the exact `x-bridge-secret`, even if public payments are enabled. The list route never returns the stored redemption key. Retry only accepts paid orders in a reviewable state and records attempt count, timestamp, and the latest sanitized error in PostgreSQL.
+
+The operational summary route also requires the exact `x-bridge-secret` and returns only queue counts. It exposes no order, user, amount, provider-event, or credential data. Run `npm run check:operations` with `BRIDGE_CHECKOUT_SECRET` in the process environment; the command exits nonzero if the bridge leaves the expected closed Sandbox state or any review/stale-pending queue is nonempty.
 
 Refund, reversal, and dispute webhooks are stored idempotently in `payment_events` and summarized in `payment_adjustments`. They update a separate financial status and enter the authenticated financial-review queue without changing a successfully delivered order back from `credited`. The bridge intentionally does not deduct quota automatically; a refund can be partial, a dispute can later resolve for the seller, and already-delivered API quota may have been consumed.
 

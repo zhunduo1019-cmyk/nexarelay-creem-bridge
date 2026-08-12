@@ -37,6 +37,14 @@ test('admin payment review endpoints require the exact bridge secret', async () 
       });
       assert.equal(financialWrong.status, 401);
 
+      const operationalMissing = await fetch(`${baseUrl}/api/payment/admin/operational-summary`);
+      assert.equal(operationalMissing.status, 401);
+
+      const operationalWrong = await fetch(`${baseUrl}/api/payment/admin/operational-summary`, {
+        headers: { 'x-bridge-secret': 'wrong-secret' },
+      });
+      assert.equal(operationalWrong.status, 401);
+
       const accepted = await fetch(`${baseUrl}/api/payment/admin/orders/not-a-uuid/retry-credit`, {
         method: 'POST',
         headers: { 'x-bridge-secret': 'bridge-admin-secret' },

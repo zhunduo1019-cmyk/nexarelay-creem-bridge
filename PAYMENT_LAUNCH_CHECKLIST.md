@@ -127,4 +127,5 @@ Do not enable Live or public payments until every item is complete:
 - Follow `DATABASE_RECOVERY_RUNBOOK.md`; verify an off-platform logical export and restrict the database's external `0.0.0.0/0` rule before enabling Live payments.
 - Render health monitoring now calls `/health`, and the first server-side logical export completed at `2026-08-11 14:45 UTC`. Downloading an encrypted off-platform copy and performing an isolated restore drill remain pending.
 - The first export now has a locally encrypted, authentication-checked copy and a verified decrypt/archive round-trip. A truly independent second storage copy and a restore into an isolated PostgreSQL instance remain pending. The broad database access rule is inherited from Workspace/Environment and must receive a cross-service impact review before it is restricted.
+- The protected operational summary and `npm run check:operations` must report all four queues at zero before any payment-mode change. The monitor intentionally fails closed and must receive the bridge secret only through its process environment.
 - Do not expose secrets in chat, screenshots, logs, GitHub, or public pages.

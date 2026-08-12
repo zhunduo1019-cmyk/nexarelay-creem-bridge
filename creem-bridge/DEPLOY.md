@@ -27,6 +27,20 @@ Use `node src/migrate.js && node src/server.js` as the start command. Configure 
 
 After each deployment, verify that `/health` reports `reconciliationEnabled: true`. Review items through `GET /api/payment/admin/review-required` and retry a single paid item through `POST /api/payment/admin/orders/:orderId/retry-credit`, passing `x-bridge-secret` only from an administrator-controlled client.
 
+Run the closed-state operational check from an administrator-controlled host:
+
+```text
+BRIDGE_CHECKOUT_SECRET=<process-only secret> npm run check:operations
+```
+
+The check reads `/health` and the authenticated
+`/api/payment/admin/operational-summary`. It emits no order or user data and
+exits nonzero if PostgreSQL is not ready, the bridge leaves the expected
+Sandbox/closed state, or the delivery-review, financial-review,
+unmatched-adjustment, or stale-pending queue is nonempty. Never place the bridge
+secret in the command history, repository, task description, log output, or a
+monitoring URL.
+
 The PayPal webhook must subscribe to these financial lifecycle events in addition to `PAYMENT.CAPTURE.COMPLETED`:
 
 ```text

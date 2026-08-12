@@ -601,6 +601,33 @@ async function financialReviewOrders(req, res, url) {
   });
 }
 
+async function operationalSummary(req, res) {
+  if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
+  const result = await query(`SELECT
+    COUNT(*) FILTER (WHERE o.status = 'review_required'
+      OR (o.status = 'credit_pending' AND d.status = 'delivering'
+        AND d.updated_at < NOW() - INTERVAL '5 minutes'))::INTEGER AS delivery_review,
+    COUNT(*) FILTER (WHERE o.financial_review_required = TRUE)::INTEGER AS financial_review,
+    COUNT(*) FILTER (WHERE o.status = 'pending'
+      AND o.created_at < NOW() - INTERVAL '1 hour')::INTEGER AS stale_pending
+    FROM orders o
+    LEFT JOIN credit_deliveries d ON d.order_id = o.id`);
+  const unmatched = await query(`SELECT COUNT(*)::INTEGER AS unmatched_adjustments
+    FROM payment_adjustments WHERE order_id IS NULL`);
+  const row = result.rows[0] || {};
+  return json(res, 200, {
+    success: true,
+    data: {
+      queues: {
+        deliveryReview: Number(row.delivery_review || 0),
+        financialReview: Number(row.financial_review || 0),
+        unmatchedAdjustments: Number(unmatched.rows[0]?.unmatched_adjustments || 0),
+        stalePending: Number(row.stale_pending || 0),
+      },
+    },
+  });
+}
+
 async function resolveFinancialReview(req, res, orderId) {
   if (!bridgeSecretAllowed(req)) return json(res, 401, { success: false, message: 'unauthorized' });
   if (!validOrderId(orderId)) return json(res, 400, { success: false, message: 'invalid order id' });
@@ -687,6 +714,7 @@ async function route(req, res) {
     if (req.method === 'POST' && url.pathname === '/api/payment/paypal/webhook') return handlePaypalWebhook(req, res);
     if (req.method === 'GET' && url.pathname === '/api/payment/admin/review-required') return reviewRequiredOrders(req, res, url);
     if (req.method === 'GET' && url.pathname === '/api/payment/admin/financial-review') return financialReviewOrders(req, res, url);
+    if (req.method === 'GET' && url.pathname === '/api/payment/admin/operational-summary') return operationalSummary(req, res);
     if (req.method === 'POST' && /^\/api\/payment\/admin\/orders\/[^/]+\/resolve-financial-review$/.test(url.pathname)) {
       return resolveFinancialReview(req, res, url.pathname.split('/')[5]);
     }
