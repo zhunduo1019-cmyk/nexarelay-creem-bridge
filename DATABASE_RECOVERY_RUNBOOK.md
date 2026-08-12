@@ -62,6 +62,18 @@ This is a verified local encrypted copy, not yet an independent second storage
 location. Copy both the `.nrbak` file and its `.dpapi-key` file to a separate
 encrypted device or vault; neither file alone is sufficient for recovery.
 
+The independent second copy was completed on 2026-08-12 in the private Google
+Drive folder `NexaRelay Payment Backups`. The folder contains the encrypted
+`.nrbak` (8,728 bytes), DPAPI-protected key (294 bytes), and non-secret manifest
+(590 bytes). Google Drive showed exactly those three files with matching names
+and displayed sizes. Sharing inspection confirmed the encrypted backup is
+restricted to the account owner and is not link-public. A browser download
+round-trip did not produce a retrievable local artifact, so content-hash
+verification of the remote object is not claimed; the local source hashes
+remain recorded outside this repository and Google Drive upload completion plus
+name/size verification passed. Restore still requires both the `.nrbak` and
+`.dpapi-key` under the original Windows user context.
+
 The dashboard currently shows external PostgreSQL access allowed from
 `0.0.0.0/0`. On 2026-08-12, this was verified as inherited from both the Render
 Workspace and Environment rather than a database-specific rule. This is not

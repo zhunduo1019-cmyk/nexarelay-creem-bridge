@@ -144,7 +144,7 @@ Do not enable Live or public payments until every item is complete:
 - Do not delete Sandbox credentials, webhook configuration, ledger rows, or database backups.
 - Follow `DATABASE_RECOVERY_RUNBOOK.md`; verify an off-platform logical export and restrict the database's external `0.0.0.0/0` rule before enabling Live payments.
 - Render health monitoring now calls `/health`, and the first server-side logical export completed at `2026-08-11 14:45 UTC`. The encrypted off-platform copy and isolated restore drill are complete.
-- The first export now has a locally encrypted, authentication-checked copy, a verified decrypt/archive round-trip, and a completed isolated PostgreSQL 18.4 restore drill. A truly independent second storage copy remains pending. The broad database access rule is inherited from Workspace/Environment and must receive a cross-service impact review before it is restricted.
+- The first export now has a locally encrypted, authentication-checked copy, a verified decrypt/archive round-trip, a completed isolated PostgreSQL 18.4 restore drill, and a private independent Google Drive copy containing the encrypted backup, DPAPI key, and manifest. The Google Drive upload was verified by exact file names and displayed sizes; a remote download content-hash round-trip remains desirable but is not claimed as completed.
 - Completed 2026-08-12: the Render network-rule impact review found one project
   and one Production environment containing the payment bridge, payment
   database, and `autolens-ai`. Workspace- or environment-level restrictions
