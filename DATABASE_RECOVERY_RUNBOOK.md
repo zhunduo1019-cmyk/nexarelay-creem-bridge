@@ -16,12 +16,37 @@ not recorded in this repository. This confirms server-side export creation, but
 an encrypted off-platform copy and restore drill are still required before Live
 payments are enabled.
 
+On 2026-08-12, that export was downloaded, encrypted locally with
+AES-256-CBC plus HMAC-SHA256, and its 64-byte encryption/authentication key was
+protected with Windows DPAPI for the current user. The encryption round-trip
+reproduced the original SHA-256 exactly, and a separate restore invocation
+verified the archive contains `toc.dat` and data files. All temporary and
+Downloads plaintext copies were then removed. The encrypted backup, DPAPI key,
+and non-secret manifest are stored in the Git-ignored `NexaRelay-Backups/`
+directory with its ACL restricted to the current Windows user, SYSTEM, and
+Administrators. Use `scripts/restore-render-backup.ps1` under the same Windows
+user and permission context that created the DPAPI key.
+
+The backup scripts are Windows-specific. `protect-render-backup.ps1` accepts
+only an explicitly named `.gz` file directly inside the current user's
+Downloads directory, verifies authentication and an exact decrypt round-trip,
+and only then removes the plaintext source. `restore-render-backup.ps1` refuses
+to overwrite an existing output path and authenticates the encrypted file
+before decrypting it.
+
+This is a verified local encrypted copy, not yet an independent second storage
+location. Copy both the `.nrbak` file and its `.dpapi-key` file to a separate
+encrypted device or vault; neither file alone is sufficient for recovery.
+
 The dashboard currently shows external PostgreSQL access allowed from
-`0.0.0.0/0`. This is not required by the bridge because it uses Render's
-internal database URL. Before Live payments are enabled, replace the broad rule
-with a known administrator IP/CIDR (or remove external access entirely after
-off-platform backup automation is established). Validate the intended admin
-source before removing the existing rule to avoid an accidental lockout.
+`0.0.0.0/0`. On 2026-08-12, this was verified as inherited from both the Render
+Workspace and Environment rather than a database-specific rule. This is not
+required by the bridge because it uses Render's internal database URL. Before
+Live payments are enabled, review every service affected by those inherited
+rules, then replace the broad rule with known administrator IP/CIDR entries (or
+remove external access after off-platform backup automation is established).
+Do not change the inherited rule from the database page without that impact
+review; doing so could affect other projects or lock out administrators.
 
 Never paste a database URL, password, or PSQL command into chat, screenshots,
 issues, logs, or GitHub.
