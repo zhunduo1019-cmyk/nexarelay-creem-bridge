@@ -34,6 +34,30 @@ and only then removes the plaintext source. `restore-render-backup.ps1` refuses
 to overwrite an existing output path and authenticates the encrypted file
 before decrypting it.
 
+## Verified isolated restore drill
+
+Completed on 2026-08-12 using PostgreSQL 18.4 Windows binaries linked from the
+official PostgreSQL Windows downloads page. The encrypted backup authenticated
+successfully, decrypted to the recorded SHA-256, and was restored into a new
+PostgreSQL 18.4 instance listening only on `127.0.0.1:55432`. The source archive
+was also produced by PostgreSQL 18.4.
+
+The restored snapshot contained seven orders (`cancelled=1`, `credited=5`,
+`pending=1`), 16 payment events, five credit deliveries, and two payment
+adjustments. All four ledger tables were present, migrations 001 through 005
+were recorded, and the duplicate `(provider, provider_event_id)` query returned
+zero rows. The one pending row reflects the 2026-08-11 export snapshot and is
+not the later stale Sandbox row that was safely closed in production.
+
+A temporary copy of the current bridge was then started on `127.0.0.1:58787`
+with only the isolated restore database URL. Its `/health` response reported
+`ok=true`, `databaseReady=true`, Sandbox mode, and Live, public payments, and
+automatic quota clawback all disabled. No production service was pointed at
+the drill database. After verification, the temporary bridge and PostgreSQL
+server were stopped and the decrypted archive, restored database, downloaded
+binaries, and all other drill files were removed. The encrypted `.nrbak`, its
+DPAPI-protected key, and the original non-secret manifest remain preserved.
+
 This is a verified local encrypted copy, not yet an independent second storage
 location. Copy both the `.nrbak` file and its `.dpapi-key` file to a separate
 encrypted device or vault; neither file alone is sufficient for recovery.

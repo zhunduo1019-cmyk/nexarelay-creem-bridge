@@ -34,6 +34,13 @@ This file records the current PayPal safety state and the remaining production g
   applied atomically. A repeated `npm run check:operations` then passed with
   delivery-review, financial-review, unmatched-adjustment, and stale-pending
   counts all at zero.
+- On 2026-08-12, the encrypted Render export completed an isolated PostgreSQL
+  18.4 restore drill. All four ledger tables and migrations 001-005 were
+  present, aggregate row counts were readable, duplicate provider event IDs
+  were zero, and a temporary bridge connected only to the restored database
+  passed `/health` in the required Sandbox/closed state. No production service
+  pointed at the drill database, and all temporary plaintext and runtime files
+  were removed afterward.
 - A Sandbox buyer opened and then cancelled a USD 1.00 digital-goods dispute.
 - PayPal delivered `CUSTOMER.DISPUTE.CREATED`, three lifecycle `CUSTOMER.DISPUTE.UPDATED` events, and `CUSTOMER.DISPUTE.RESOLVED`.
 - All five dispute events remained associated with one dispute adjustment; the final adjustment status is `resolved`, the order is `financial_status=dispute_resolved`, and the unmatched-adjustment count is zero.
@@ -136,7 +143,7 @@ Do not enable Live or public payments until every item is complete:
 - Do not automatically deduct quota for refunds or disputes.
 - Do not delete Sandbox credentials, webhook configuration, ledger rows, or database backups.
 - Follow `DATABASE_RECOVERY_RUNBOOK.md`; verify an off-platform logical export and restrict the database's external `0.0.0.0/0` rule before enabling Live payments.
-- Render health monitoring now calls `/health`, and the first server-side logical export completed at `2026-08-11 14:45 UTC`. Downloading an encrypted off-platform copy and performing an isolated restore drill remain pending.
-- The first export now has a locally encrypted, authentication-checked copy and a verified decrypt/archive round-trip. A truly independent second storage copy and a restore into an isolated PostgreSQL instance remain pending. The broad database access rule is inherited from Workspace/Environment and must receive a cross-service impact review before it is restricted.
+- Render health monitoring now calls `/health`, and the first server-side logical export completed at `2026-08-11 14:45 UTC`. The encrypted off-platform copy and isolated restore drill are complete.
+- The first export now has a locally encrypted, authentication-checked copy, a verified decrypt/archive round-trip, and a completed isolated PostgreSQL 18.4 restore drill. A truly independent second storage copy remains pending. The broad database access rule is inherited from Workspace/Environment and must receive a cross-service impact review before it is restricted.
 - The protected operational summary and `npm run check:operations` must report all four queues at zero before any payment-mode change. The monitor intentionally fails closed and must receive the bridge secret only through its process environment.
 - Do not expose secrets in chat, screenshots, logs, GitHub, or public pages.
