@@ -145,5 +145,12 @@ Do not enable Live or public payments until every item is complete:
 - Follow `DATABASE_RECOVERY_RUNBOOK.md`; verify an off-platform logical export and restrict the database's external `0.0.0.0/0` rule before enabling Live payments.
 - Render health monitoring now calls `/health`, and the first server-side logical export completed at `2026-08-11 14:45 UTC`. The encrypted off-platform copy and isolated restore drill are complete.
 - The first export now has a locally encrypted, authentication-checked copy, a verified decrypt/archive round-trip, and a completed isolated PostgreSQL 18.4 restore drill. A truly independent second storage copy remains pending. The broad database access rule is inherited from Workspace/Environment and must receive a cross-service impact review before it is restricted.
+- Completed 2026-08-12: the Render network-rule impact review found one project
+  and one Production environment containing the payment bridge, payment
+  database, and `autolens-ai`. Workspace- or environment-level restrictions
+  would affect `autolens-ai` and must not be used for database-only hardening.
+  The PostgreSQL-specific rule can later be restricted or cleared without
+  affecting Render internal connections; do not change it until the required
+  administrator external IP/CIDR is known or external access can be disabled.
 - The protected operational summary and `npm run check:operations` must report all four queues at zero before any payment-mode change. The monitor intentionally fails closed and must receive the bridge secret only through its process environment.
 - Do not expose secrets in chat, screenshots, logs, GitHub, or public pages.

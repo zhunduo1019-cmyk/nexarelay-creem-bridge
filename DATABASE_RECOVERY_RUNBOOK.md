@@ -72,6 +72,18 @@ remove external access after off-platform backup automation is established).
 Do not change the inherited rule from the database page without that impact
 review; doing so could affect other projects or lock out administrators.
 
+The cross-service impact review was completed on 2026-08-12. The Render
+workspace contains one project and one Production environment with three
+resources: `nexarelay-creem-bridge`, `nexarelay-payments-db`, and
+`autolens-ai`. Workspace- or environment-level restrictions would therefore
+also apply to `autolens-ai` and must not be changed as part of the payment
+database hardening task. The database page separately exposes a PostgreSQL-only
+inbound rule. Restricting or clearing that database-specific rule affects only
+external connections to `nexarelay-payments-db`; the payment bridge's internal
+Render connection remains available. Render's documentation confirms that
+inbound rules govern public-internet access only and that same-region services
+can continue using the database's internal URL.
+
 Never paste a database URL, password, or PSQL command into chat, screenshots,
 issues, logs, or GitHub.
 
