@@ -161,6 +161,11 @@ Do not enable Live or public payments until every item is complete:
     non-Mainland China buyer payment method completed. Capture, Live webhook,
     ledger entry, quota delivery, and reconciliation queues were verified,
     after which the bridge was restored to Sandbox/closed state.
+11. Completed 2026-08-17: `PILOT_PAYMENT_RUNBOOK.md` defines the closed,
+    consent-based, one-time-link pilot procedure, acceptance checks,
+    monitoring, incident response, and Sandbox/closed rollback. Public payment
+    creation remains disabled because the bridge has no front-end login-session
+    binding for a self-service pilot.
 
 ## Do not do yet
 
