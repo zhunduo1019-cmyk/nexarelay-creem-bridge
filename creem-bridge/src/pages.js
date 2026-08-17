@@ -74,3 +74,17 @@ export function paymentResultPage({
 </body>
 </html>`;
 }
+
+export function checkoutPage({ ticket, username }) {
+  const safeTicket = escapeHtml(ticket);
+  const safeUsername = escapeHtml(username);
+  return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NexaRelay 充值</title>
+<style>:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#172033}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f7fb;padding:24px}main{width:min(680px,100%);background:#fff;border:1px solid #e2e7f0;border-radius:20px;padding:34px;box-shadow:0 18px 45px rgba(26,39,64,.09)}h1{margin:0 0 8px;font-size:28px}p{color:#59657a;line-height:1.6}.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:26px 0}.plan{border:1px solid #dce3ef;border-radius:14px;background:#fff;padding:20px;text-align:left;cursor:pointer}.plan:hover,.plan:focus{border-color:#1769e0;box-shadow:0 0 0 3px #e8f1ff}.plan b{font-size:18px;display:block}.plan span{display:block;color:#59657a;margin-top:7px}.plan em{display:block;font-style:normal;color:#1769e0;font-weight:700;margin-top:15px}.note{font-size:13px;color:#7b8699}#status{min-height:24px;color:#b42318}@media(max-width:600px){.plans{grid-template-columns:1fr}}</style></head>
+<body><main><h1>选择充值套餐</h1><p>当前账户：${safeUsername}。付款完成后，额度将自动发放至该账户。</p><div class="plans">
+<button class="plan" data-plan="starter"><b>Starter</b><span>500,000 credits</span><em>US$1.00</em></button>
+<button class="plan" data-plan="plus"><b>Plus</b><span>2,800,000 credits</span><em>US$5.00</em></button>
+<button class="plan" data-plan="pro"><b>Pro</b><span>6,000,000 credits</span><em>US$10.00</em></button>
+</div><p id="status" role="status"></p><p class="note">仅 PayPal 支付；价格和额度由服务器固定，不接受浏览器提交的金额或额度。</p></main>
+<script>const ticket='${safeTicket}';const status=document.getElementById('status');document.querySelectorAll('[data-plan]').forEach((button)=>button.addEventListener('click',async()=>{document.querySelectorAll('button').forEach((item)=>item.disabled=true);status.textContent='正在创建安全付款订单…';try{const response=await fetch('/api/payment/paypal/orders',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({plan:button.dataset.plan,checkoutTicket:ticket})});const payload=await response.json();if(!response.ok||!payload.success||!payload.data?.approvalUrl)throw new Error(payload.message||'无法创建付款订单');location.assign(payload.data.approvalUrl)}catch(error){status.textContent=error.message||'无法创建付款订单';document.querySelectorAll('button').forEach((item)=>item.disabled=false)}}));</script></body></html>`;
+}

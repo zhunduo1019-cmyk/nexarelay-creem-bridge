@@ -69,4 +69,9 @@ PAYPAL_LIVE_WEBHOOK_ID
 ONE_API_ADMIN_TOKEN
 DATABASE_URL
 BRIDGE_CHECKOUT_SECRET
+ONE_API_CHECKOUT_HMAC_SECRET
 ```
+
+`ONE_API_CHECKOUT_HMAC_SECRET` is reserved for the authenticated One API
+checkout handoff. It must match the custom One API deployment's value and must
+not be exposed to a browser. It does not enable public payments.

@@ -14,8 +14,8 @@ import {
   redeemQuota,
   redemptionStatuses,
 } from './oneapi.js';
-import { paymentResultPage, paypalReturnTokenMatches } from './pages.js';
-import { secretsMatch } from './security.js';
+import { checkoutPage, paymentResultPage, paypalReturnTokenMatches } from './pages.js';
+import { secretsMatch, verifyOneApiCheckoutTicket } from './security.js';
 import {
   captureIdFromCompletedEvent,
   describeFinancialEvent,
@@ -67,6 +67,16 @@ function bridgeSecretAllowed(req) {
   return secretsMatch(req.headers['x-bridge-secret'], config().bridgeCheckoutSecret);
 }
 
+function checkoutTicketOwner(input) {
+  return verifyOneApiCheckoutTicket(input?.checkoutTicket, config().oneApiCheckoutHmacSecret);
+}
+
+function resolvePaymentOwner(req, input) {
+  const settings = config();
+  if (settings.publicPaymentsEnabled || bridgeSecretAllowed(req)) return parseOwner(input);
+  return checkoutTicketOwner(input);
+}
+
 function parseOwner(input) {
   const userId = Number(input.userId);
   const username = String(input.username || '');
@@ -99,11 +109,11 @@ function safeErrorMessage(error) {
 }
 
 async function createOrder(req, res) {
-  if (!paymentAccessAllowed(req)) return json(res, 503, { success: false, message: 'Online card top-ups are currently unavailable.' });
   const input = await readJson(req);
+  const owner = resolvePaymentOwner(req, input);
+  if (!owner) return json(res, 503, { success: false, message: 'Online card top-ups are currently unavailable.' });
   const plan = getPlan(input.plan);
   if (!plan) return json(res, 400, { success: false, message: 'invalid plan' });
-  const owner = parseOwner(input);
   const order = {
     id: crypto.randomUUID(), provider: 'paypal', user_id: owner.userId, username: owner.username,
     plan_key: input.plan, amount_cents: plan.amountCents, currency: plan.currency, credits: plan.credits, status: 'pending',
@@ -707,7 +717,12 @@ async function route(req, res) {
       });
     }
     if (req.method === 'GET' && url.pathname === '/') return json(res, 200, { success: false, message: 'Online card top-ups are currently unavailable.' });
-    if ((req.method === 'GET' || req.method === 'POST') && (url.pathname === '/checkout' || url.pathname === '/api/payment/creem/checkout')) return json(res, 503, { success: false, message: 'Online card top-ups are currently unavailable.' });
+    if (req.method === 'GET' && url.pathname === '/checkout') {
+      const owner = checkoutTicketOwner({ checkoutTicket: url.searchParams.get('ticket') });
+      if (!owner) return html(res, 503, paymentResultPage({ title: '支付暂不可用', heading: '支付链接无效或已过期', message: '请返回 NexaRelay 后重新发起付款。', tone: 'error', accountUrl: accountUrl() }));
+      return html(res, 200, checkoutPage({ ticket: url.searchParams.get('ticket'), username: owner.username }));
+    }
+    if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/api/payment/creem/checkout') return json(res, 410, { success: false, message: 'Creem payments are no longer supported.' });
     if (req.method === 'POST' && url.pathname === '/api/payment/creem/webhook') return json(res, 410, { success: false, message: 'Creem payments are no longer supported.' });
     if (req.method === 'POST' && url.pathname === '/api/payment/paypal/orders') return createOrder(req, res);
     if (req.method === 'POST' && /^\/api\/payment\/paypal\/orders\/[^/]+\/capture$/.test(url.pathname)) return captureOrder(req, res, url.pathname.split('/')[5]);

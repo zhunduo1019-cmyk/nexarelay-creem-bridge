@@ -46,6 +46,7 @@ export function config() {
     paypalWebhookId: paypalCredentials.webhookId,
     publicPaymentsEnabled: process.env.PAYMENT_PUBLIC_ENABLED === 'true',
     bridgeCheckoutSecret: process.env.BRIDGE_CHECKOUT_SECRET,
+    oneApiCheckoutHmacSecret: process.env.ONE_API_CHECKOUT_HMAC_SECRET,
   };
 }
 
