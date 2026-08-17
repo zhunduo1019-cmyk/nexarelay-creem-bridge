@@ -54,6 +54,17 @@ This file records the current PayPal safety state and the remaining production g
   no authorization or capture occurred, no quota was delivered, and the order
   was closed as `cancelled` with null capture, paid, and credited fields. The
   user's quota remained `2,010,000`, and the bridge was returned to Sandbox.
+- On 2026-08-17, a second controlled Live USD 1.00 Starter order was created
+  for One API user `ft0717` through the bridge's protected endpoint. PayPal
+  returned `PAYER_ACTION_REQUIRED`, and the hosted Live checkout exposed the
+  guest debit/credit-card flow through its email step. No legitimate
+  non-Mainland payment method was available, so the order was deliberately
+  cancelled before authorization. The ledger shows `cancelled` with null paid
+  and credited timestamps; no quota was delivered. The bridge was then
+  returned to the required Sandbox/Live-disabled/public-disabled state. This
+  verifies Live order creation, guest-checkout reachability, token-bound
+  cancellation, and the no-credit guard only; it does not verify a successful
+  Live capture, Live webhook, or Live quota delivery.
 
 ## Server-side pricing
 
