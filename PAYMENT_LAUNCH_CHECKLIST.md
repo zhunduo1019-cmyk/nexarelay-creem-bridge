@@ -65,6 +65,21 @@ This file records the current PayPal safety state and the remaining production g
   verifies Live order creation, guest-checkout reachability, token-bound
   cancellation, and the no-credit guard only; it does not verify a successful
   Live capture, Live webhook, or Live quota delivery.
+- On 2026-08-17, a third controlled Live USD 1.00 Starter order was completed
+  for One API user `ft0717` through the protected bridge endpoint. The order
+  was captured and entered `credited`; its paid and credited timestamps were
+  recorded one second apart. The ledger recorded two idempotently handled
+  `PAYMENT.CAPTURE.COMPLETED` deliveries and the corresponding credit-delivery
+  row is `credited`. The protected operations monitor then reported zero
+  delivery-review, financial-review, unmatched-adjustment, and stale-pending
+  items. A read-only One API check showed the target user's quota as
+  `2,509,703`. The bridge was immediately restored to
+  `PAYPAL_MODE=sandbox`, `PAYPAL_LIVE_ENABLED=false`, and
+  `PAYMENT_PUBLIC_ENABLED=false`; the final public health check confirmed
+  database readiness, reconciliation and ledger checks enabled, automatic
+  quota clawback disabled, and public payments closed. This completes the
+  controlled Live capture, webhook, ledger, and quota-delivery verification;
+  it does not authorize public payment access.
 
 ## Server-side pricing
 
@@ -142,10 +157,10 @@ Do not enable Live or public payments until every item is complete:
 9. Completed for the blocked 2026-08-11 attempt: `PAYPAL_MODE=live` was enabled
    only together with `PAYPAL_LIVE_ENABLED=true`; both were returned to the
    Sandbox/false state after the attempt.
-10. Pending: repeat the controlled Live payment with a legitimate non-Mainland
-    China buyer account or card and its real billing address, then verify the
-    capture, Live webhook, ledger entry, quota delivery, and reconciliation
-    queues before considering public access.
+10. Completed 2026-08-17: a controlled Live payment with a legitimate
+    non-Mainland China buyer payment method completed. Capture, Live webhook,
+    ledger entry, quota delivery, and reconciliation queues were verified,
+    after which the bridge was restored to Sandbox/closed state.
 
 ## Do not do yet
 
